@@ -24,6 +24,14 @@
 
 #include <vector>
 
+namespace std
+{
+    namespace filesystem
+    {
+        class path;
+    }
+}
+
 namespace CAULDRON_DX12
 {
     void CreateShaderCache();
@@ -46,6 +54,14 @@ namespace CAULDRON_DX12
         const DefineList* pMacro,
         const char *pEntryPoint,
         const char *pTarget,
+        UINT Flags,
+        D3D12_SHADER_BYTECODE* pOutBytecode);
+
+    bool CompileShaderFromFile(
+        const std::filesystem::path&,
+        const DefineList* pMacro,
+        const char* pEntryPoint,
+        const char* pTarget,
         UINT Flags,
         D3D12_SHADER_BYTECODE* pOutBytecode);
 }

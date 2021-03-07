@@ -22,8 +22,6 @@
 #include "PostProc/SkyDome.h"
 #include "../Common/GLTF/GltfPbrMaterial.h"
 
-#include <filesystem>
-
 namespace CAULDRON_DX12
 {
     struct PBRMaterial
@@ -79,7 +77,8 @@ namespace CAULDRON_DX12
 
         void OnDestroy();
         void Draw(ID3D12GraphicsCommandList *pCommandList, CBV_SRV_UAV *pShadowBufferSRV);
-    private:
+    
+    protected:
         GLTFTexturesAndBuffers *m_pGLTFTexturesAndBuffers;
 
         ResourceViewHeaps *m_pResourceViewHeaps;
@@ -100,7 +99,16 @@ namespace CAULDRON_DX12
 
         void CreateGPUMaterialData(PBRMaterial *tfmat, std::map<std::string, Texture *> &texturesBase, SkyDome *pSkyDome);
         void CreateDescriptors(ID3D12Device* pDevice, bool bUsingSkinning, DefineList *pAttributeDefines, PBRPrimitives *pPrimitive);
-        virtual void CreatePipeline(ID3D12Device*, std::vector<std::string> semanticName, std::vector<D3D12_INPUT_ELEMENT_DESC> layout, DefineList *pAttributeDefines, PBRPrimitives*);
+        
+        virtual void CreatePipeline(
+            ID3D12Device*,
+            std::vector<std::string> semanticName,
+            std::vector<D3D12_INPUT_ELEMENT_DESC> layout,
+            DefineList *pAttributeDefines,
+            PBRPrimitives*,
+            const std::string& strMeshName,
+            uint32_t iPrimitive
+        );
     };
 
     class MetashadeGltfPbrPass
@@ -112,7 +120,16 @@ namespace CAULDRON_DX12
         {}
 
     private:
-        //void CreatePipeline(ID3D12Device*, std::vector<std::string> semanticName, std::vector<D3D12_INPUT_ELEMENT_DESC> layout, DefineList* pAttributeDefines, PBRPrimitives*) override;
+        void CreatePipeline(
+            ID3D12Device*,
+            std::vector<std::string> semanticName,
+            std::vector<D3D12_INPUT_ELEMENT_DESC> layout,
+            DefineList* pAttributeDefines,
+            PBRPrimitives*,
+            const std::string& strMeshName,
+            uint32_t iPrimitive
+        ) override;
+
         const std::filesystem::path     m_metashadeOutDir;
     };
 }

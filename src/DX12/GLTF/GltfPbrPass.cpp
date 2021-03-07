@@ -101,16 +101,18 @@ namespace CAULDRON_DX12
             const json::array_t &meshes = j3["meshes"];
             const json::array_t &accessors = j3["accessors"];
             m_meshes.resize(meshes.size());
-            for (uint32_t i = 0; i < meshes.size(); i++)
+            for (uint32_t iMesh = 0; iMesh < meshes.size(); iMesh++)
             {
-                PBRMesh *tfmesh = &m_meshes[i];
-                const json::array_t &primitives = meshes[i]["primitives"];
+                PBRMesh *tfmesh = &m_meshes[iMesh];
+                const json::array_t &primitives = meshes[iMesh]["primitives"];
+                const std::string strMeshName = meshes[iMesh]["name"].get<std::string>();
+
                 tfmesh->m_pPrimitives.resize(primitives.size());
 
-                for (uint32_t p = 0; p < primitives.size(); p++)
+                for (uint32_t iPrimitive = 0; iPrimitive < primitives.size(); iPrimitive++)
                 {
-                    json::object_t primitive = primitives[p];
-                    PBRPrimitives *pPrimitive = &tfmesh->m_pPrimitives[p];
+                    json::object_t primitive = primitives[iPrimitive];
+                    PBRPrimitives *pPrimitive = &tfmesh->m_pPrimitives[iPrimitive];
 
                     // Sets primitive's material, or set a default material if none was specified in the GLTF
                     //
@@ -169,9 +171,17 @@ namespace CAULDRON_DX12
                     // Create the descriptors, the root signature and the pipeline
                     //
                     {
-                        bool bUsingSkinning = m_pGLTFTexturesAndBuffers->m_pGLTFCommon->FindMeshSkinId(i) != -1;
+                        bool bUsingSkinning = m_pGLTFTexturesAndBuffers->m_pGLTFCommon->FindMeshSkinId(iMesh) != -1;
                         CreateDescriptors(pDevice->GetDevice(), bUsingSkinning, &attributeDefines, pPrimitive);
-                        CreatePipeline(pDevice->GetDevice(), semanticNames, layout, &attributeDefines, pPrimitive);
+                        CreatePipeline(
+                            pDevice->GetDevice(),
+                            semanticNames,
+                            layout,
+                            &attributeDefines,
+                            pPrimitive,
+                            strMeshName,
+                            iPrimitive
+                        );
                     }
                 }
             }
@@ -326,7 +336,15 @@ namespace CAULDRON_DX12
     // CreatePipeline
     //
     //--------------------------------------------------------------------------------------
-    void GltfPbrPass::CreatePipeline(ID3D12Device* pDevice, std::vector<std::string> semanticNames, std::vector<D3D12_INPUT_ELEMENT_DESC> layout, DefineList *pAttributeDefines, PBRPrimitives *pPrimitive)
+    void GltfPbrPass::CreatePipeline(
+        ID3D12Device* pDevice,
+        std::vector<std::string> semanticNames,
+        std::vector<D3D12_INPUT_ELEMENT_DESC> layout,
+        DefineList *pAttributeDefines,
+        PBRPrimitives *pPrimitive,
+        const std::string& /*strMeshName*/,
+        uint32_t /*iPrimitive*/
+    )
     {
         /////////////////////////////////////////////
         // Compile and create shaders
@@ -517,5 +535,85 @@ namespace CAULDRON_DX12
         // Draw
         //
         pCommandList->DrawIndexedInstanced(m_geometry.m_NumIndices, 1, 0, 0, 0);
+    }
+
+    void MetashadeGltfPbrPass::CreatePipeline(
+        ID3D12Device* pDevice,
+        std::vector<std::string> /*semanticNames*/,
+        std::vector<D3D12_INPUT_ELEMENT_DESC> layout,
+        DefineList* pAttributeDefines,
+        PBRPrimitives* pPrimitive,
+        const std::string& strMeshName,
+        uint32_t iPrimitive)
+    {
+        /////////////////////////////////////////////
+        // Compile and create shaders
+
+        D3D12_SHADER_BYTECODE shaderVert, shaderPixel;
+        {
+            // Empty defines
+            DefineList defines;
+
+            auto fileName = [&strMeshName, iPrimitive](const char* pszStage) -> std::string
+            {
+                return (boost::format("%1%-%2%-%3%.hlsl") % strMeshName % iPrimitive % pszStage).str();
+            };
+
+            CompileShaderFromFile(
+                m_metashadeOutDir / fileName("VS"),
+                &defines,
+                "mainVS",
+                "vs_5_0",
+                0,
+                &shaderVert
+            );
+            CompileShaderFromFile(
+                m_metashadeOutDir / fileName("PS"),
+                &defines,
+                "mainPS",
+                "ps_5_0",
+                0,
+                &shaderPixel
+            );
+        }
+
+        // Set blending
+        //
+        CD3DX12_BLEND_DESC blendState = CD3DX12_BLEND_DESC(D3D12_DEFAULT);
+        blendState.RenderTarget[0] = D3D12_RENDER_TARGET_BLEND_DESC
+        {
+            (pPrimitive->m_pMaterial->m_pbrMaterialParameters.m_defines.Has("DEF_alphaMode_BLEND")),
+            FALSE,
+            D3D12_BLEND_SRC_ALPHA, D3D12_BLEND_INV_SRC_ALPHA, D3D12_BLEND_OP_ADD,
+            D3D12_BLEND_ONE, D3D12_BLEND_ZERO, D3D12_BLEND_OP_ADD,
+            D3D12_LOGIC_OP_NOOP,
+            D3D12_COLOR_WRITE_ENABLE_ALL,
+        };
+
+        /////////////////////////////////////////////
+        // Create a PSO description
+
+        D3D12_GRAPHICS_PIPELINE_STATE_DESC descPso = {};
+        descPso.InputLayout = { layout.data(), (UINT)layout.size() };
+        descPso.pRootSignature = pPrimitive->m_RootSignature;
+        descPso.VS = shaderVert;
+        descPso.PS = shaderPixel;
+        descPso.RasterizerState = CD3DX12_RASTERIZER_DESC(D3D12_DEFAULT);
+        descPso.RasterizerState.CullMode = (pPrimitive->m_pMaterial->m_pbrMaterialParameters.m_doubleSided) ? D3D12_CULL_MODE_NONE : D3D12_CULL_MODE_FRONT;
+        descPso.BlendState = blendState;
+        descPso.DepthStencilState = CD3DX12_DEPTH_STENCIL_DESC(D3D12_DEFAULT);
+        descPso.DepthStencilState.DepthFunc = D3D12_COMPARISON_FUNC_LESS_EQUAL;
+        descPso.SampleMask = UINT_MAX;
+        descPso.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
+        descPso.NumRenderTargets = 1;
+        descPso.RTVFormats[0] = m_outFormat;
+        descPso.DSVFormat = DXGI_FORMAT_D32_FLOAT;
+        descPso.SampleDesc.Count = m_sampleCount;
+        descPso.NodeMask = 0;
+
+        ThrowIfFailed(
+            pDevice->CreateGraphicsPipelineState(&descPso, IID_PPV_ARGS(&pPrimitive->m_PipelineRender))
+        );
+        SetName(pPrimitive->m_PipelineRender, "GltfPbrPass::m_PipelineRender");
     }
 }

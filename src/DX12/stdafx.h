@@ -38,10 +38,13 @@ using namespace DirectX;
 #include <limits>
 #include <algorithm>
 #include <mutex>
+#include <filesystem>
 
 #include "..\common\Misc\Error.h"
 #include "base\UserMarkers.h"
 #include "base\Helper.h"
 #include "..\common\misc\misc.h"
+
+#include <boost/format.hpp>
 
 // TODO: reference additional headers your program requires here

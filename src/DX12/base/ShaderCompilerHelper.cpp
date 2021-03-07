@@ -412,6 +412,25 @@ namespace CAULDRON_DX12
         return false;
     }
 
+    bool CompileShaderFromFile(
+        const std::filesystem::path& filePath,
+        const DefineList* pDefines,
+        const char* pEntryPoint,
+        const char* pTarget,
+        UINT Flags,
+        D3D12_SHADER_BYTECODE* pOutBytecode)
+    {
+        char* pShaderCode = nullptr;
+        size_t size = 0;
+
+        if (ReadFile(filePath.u8string().c_str(), &pShaderCode, &size, false))
+        {
+            return CompileShaderFromString(pShaderCode, pDefines, pEntryPoint, pTarget, Flags, 0, pOutBytecode);
+        }
+
+        return false;
+    }
+
 
     void CreateShaderCache()
     {        
