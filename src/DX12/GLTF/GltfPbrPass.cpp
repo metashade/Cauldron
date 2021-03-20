@@ -521,8 +521,8 @@ namespace CAULDRON_DX12
         //// bind the shadow buffer
         //pCommandList->SetGraphicsRootDescriptorTable(paramIndex++, pShadowBufferSRV->GetGPU());
 
-        //// bind the per object constant buffer descriptor
-        //pCommandList->SetGraphicsRootConstantBufferView(paramIndex++, perObjectDesc);
+        // bind the per object constant buffer descriptor
+        pCommandList->SetGraphicsRootConstantBufferView(paramIndex++, perObjectDesc);
 
         //// bind the skeleton bind matrices constant buffer descriptor
         //if (pPerSkeleton != 0)
@@ -558,8 +558,8 @@ namespace CAULDRON_DX12
         //// shadow buffer
         //RTSlot[params++].InitAsDescriptorTable(1, &DescRange[1], D3D12_SHADER_VISIBILITY_PIXEL);
 
-        //// b1 <- Constant buffer 'per object', these are mainly the material data
-        //RTSlot[params++].InitAsConstantBufferView(1, 0, D3D12_SHADER_VISIBILITY_ALL);
+        // b1 <- Constant buffer 'per object', these are mainly the material data
+        RTSlot[params++].InitAsConstantBufferView(1, 0, D3D12_SHADER_VISIBILITY_ALL);
 
         //// b2 <- Constant buffer holding the skinning matrices
         //if (bUsingSkinning)
