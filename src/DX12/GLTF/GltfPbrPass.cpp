@@ -512,11 +512,11 @@ namespace CAULDRON_DX12
         // bind the per scene constant buffer descriptor
         pCommandList->SetGraphicsRootConstantBufferView(paramIndex++, perFrameDesc);
 
-        //// bind the textures and samplers descriptors
-        //if (m_pMaterial->m_textureCount > 0)
-        //{
-        //    pCommandList->SetGraphicsRootDescriptorTable(paramIndex++, m_pMaterial->m_texturesTable.GetGPU());
-        //}
+        // bind the textures and samplers descriptors
+        if (m_pMaterial->m_textureCount > 0)
+        {
+           pCommandList->SetGraphicsRootDescriptorTable(paramIndex++, m_pMaterial->m_texturesTable.GetGPU());
+        }
 
         //// bind the shadow buffer
         //pCommandList->SetGraphicsRootDescriptorTable(paramIndex++, pShadowBufferSRV->GetGPU());
@@ -549,11 +549,11 @@ namespace CAULDRON_DX12
         // b0 <- Constant buffer 'per frame'
         RTSlot[params++].InitAsConstantBufferView(0, 0, D3D12_SHADER_VISIBILITY_ALL);
 
-        //// textures table
-        //if (pPrimitive->m_pMaterial->m_textureCount > 0)
-        //{
-        //    RTSlot[params++].InitAsDescriptorTable(1, &DescRange[0], D3D12_SHADER_VISIBILITY_PIXEL);
-        //}
+        // textures table
+        if (pPrimitive->m_pMaterial->m_textureCount > 0)
+        {
+            RTSlot[params++].InitAsDescriptorTable(1, &DescRange[0], D3D12_SHADER_VISIBILITY_PIXEL);
+        }
 
         //// shadow buffer
         //RTSlot[params++].InitAsDescriptorTable(1, &DescRange[1], D3D12_SHADER_VISIBILITY_PIXEL);
