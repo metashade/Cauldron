@@ -572,8 +572,8 @@ namespace CAULDRON_DX12
         CD3DX12_ROOT_SIGNATURE_DESC descRootSignature = CD3DX12_ROOT_SIGNATURE_DESC();
         descRootSignature.pParameters = RTSlot;
         descRootSignature.NumParameters = params;
-        descRootSignature.pStaticSamplers = nullptr; // pPrimitive->m_pMaterial->m_samplers;
-        descRootSignature.NumStaticSamplers = 0; //pPrimitive->m_pMaterial->m_textureCount + 1;  // account for shadow sampler
+        descRootSignature.pStaticSamplers = pPrimitive->m_pMaterial->m_samplers;
+        descRootSignature.NumStaticSamplers = pPrimitive->m_pMaterial->m_textureCount; //+ 1;  // account for shadow sampler
 
         // deny uneccessary access to certain pipeline stages
         descRootSignature.Flags = D3D12_ROOT_SIGNATURE_FLAG_NONE
