@@ -518,15 +518,15 @@ namespace CAULDRON_DX12
            pCommandList->SetGraphicsRootDescriptorTable(paramIndex++, m_pMaterial->m_texturesTable.GetGPU());
         }
 
-        //// bind the shadow buffer
-        //pCommandList->SetGraphicsRootDescriptorTable(paramIndex++, pShadowBufferSRV->GetGPU());
+        // bind the shadow buffer
+        pCommandList->SetGraphicsRootDescriptorTable(paramIndex++, pShadowBufferSRV->GetGPU());
 
         // bind the per object constant buffer descriptor
         pCommandList->SetGraphicsRootConstantBufferView(paramIndex++, perObjectDesc);
 
         //// bind the skeleton bind matrices constant buffer descriptor
-        //if (pPerSkeleton != 0)
-        //    pCommandList->SetGraphicsRootConstantBufferView(paramIndex++, pPerSkeleton);
+        if (pPerSkeleton != 0)
+            pCommandList->SetGraphicsRootConstantBufferView(paramIndex++, pPerSkeleton);
 
         // Bind Pipeline
         //
@@ -535,61 +535,6 @@ namespace CAULDRON_DX12
         // Draw
         //
         pCommandList->DrawIndexedInstanced(m_geometry.m_NumIndices, 1, 0, 0, 0);
-    }
-
-    void MetashadeGltfPbrPass::CreateDescriptors(ID3D12Device* pDevice, bool bUsingSkinning, DefineList* pAttributeDefines, PBRPrimitives* pPrimitive)
-    {
-        CD3DX12_DESCRIPTOR_RANGE DescRange[2];
-        DescRange[0].Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, pPrimitive->m_pMaterial->m_textureCount, 0); // texture table
-        DescRange[1].Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 9);                                       // shadow buffer
-
-        int params = 0;
-        CD3DX12_ROOT_PARAMETER RTSlot[5];
-
-        // b0 <- Constant buffer 'per frame'
-        RTSlot[params++].InitAsConstantBufferView(0, 0, D3D12_SHADER_VISIBILITY_ALL);
-
-        // textures table
-        if (pPrimitive->m_pMaterial->m_textureCount > 0)
-        {
-            RTSlot[params++].InitAsDescriptorTable(1, &DescRange[0], D3D12_SHADER_VISIBILITY_PIXEL);
-        }
-
-        //// shadow buffer
-        //RTSlot[params++].InitAsDescriptorTable(1, &DescRange[1], D3D12_SHADER_VISIBILITY_PIXEL);
-
-        // b1 <- Constant buffer 'per object', these are mainly the material data
-        RTSlot[params++].InitAsConstantBufferView(1, 0, D3D12_SHADER_VISIBILITY_ALL);
-
-        //// b2 <- Constant buffer holding the skinning matrices
-        //if (bUsingSkinning)
-        //{
-        //    RTSlot[params++].InitAsConstantBufferView(2, 0, D3D12_SHADER_VISIBILITY_VERTEX);
-        //    (*pAttributeDefines)["ID_SKINNING_MATRICES"] = std::to_string(2);
-        //}
-
-        // the root signature contains up to 5 slots to be used
-        CD3DX12_ROOT_SIGNATURE_DESC descRootSignature = CD3DX12_ROOT_SIGNATURE_DESC();
-        descRootSignature.pParameters = RTSlot;
-        descRootSignature.NumParameters = params;
-        descRootSignature.pStaticSamplers = pPrimitive->m_pMaterial->m_samplers;
-        descRootSignature.NumStaticSamplers = pPrimitive->m_pMaterial->m_textureCount; //+ 1;  // account for shadow sampler
-
-        // deny uneccessary access to certain pipeline stages
-        descRootSignature.Flags = D3D12_ROOT_SIGNATURE_FLAG_NONE
-            | D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT
-            | D3D12_ROOT_SIGNATURE_FLAG_DENY_HULL_SHADER_ROOT_ACCESS
-            | D3D12_ROOT_SIGNATURE_FLAG_DENY_DOMAIN_SHADER_ROOT_ACCESS
-            | D3D12_ROOT_SIGNATURE_FLAG_DENY_GEOMETRY_SHADER_ROOT_ACCESS;
-
-        ID3DBlob* pOutBlob, * pErrorBlob = NULL;
-        ThrowIfFailed(D3D12SerializeRootSignature(&descRootSignature, D3D_ROOT_SIGNATURE_VERSION_1, &pOutBlob, &pErrorBlob));
-        ThrowIfFailed(pDevice->CreateRootSignature(0, pOutBlob->GetBufferPointer(), pOutBlob->GetBufferSize(), IID_PPV_ARGS(&pPrimitive->m_RootSignature)));
-        SetName(pPrimitive->m_RootSignature, "GltfPbr::m_RootSignature");
-
-        pOutBlob->Release();
-        if (pErrorBlob)
-            pErrorBlob->Release();
     }
 
     void MetashadeGltfPbrPass::CreatePipeline(

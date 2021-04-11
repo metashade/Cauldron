@@ -98,7 +98,7 @@ namespace CAULDRON_DX12
         uint32_t m_sampleCount;
 
         void CreateGPUMaterialData(PBRMaterial *tfmat, std::map<std::string, Texture *> &texturesBase, SkyDome *pSkyDome);
-        virtual void CreateDescriptors(ID3D12Device* pDevice, bool bUsingSkinning, DefineList *pAttributeDefines, PBRPrimitives *pPrimitive);
+        void CreateDescriptors(ID3D12Device* pDevice, bool bUsingSkinning, DefineList *pAttributeDefines, PBRPrimitives *pPrimitive);
         
         virtual void CreatePipeline(
             ID3D12Device*,
@@ -120,8 +120,6 @@ namespace CAULDRON_DX12
         {}
 
     private:
-        void CreateDescriptors(ID3D12Device* pDevice, bool bUsingSkinning, DefineList* pAttributeDefines, PBRPrimitives* pPrimitive) override;
-
         void CreatePipeline(
             ID3D12Device*,
             std::vector<std::string> semanticName,
