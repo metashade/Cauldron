@@ -1,6 +1,6 @@
-// AMD AMDUtils code
+// AMD Cauldron code
 // 
-// Copyright(c) 2018 Advanced Micro Devices, Inc.All rights reserved.
+// Copyright(c) 2020 Advanced Micro Devices, Inc.All rights reserved.
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files(the "Software"), to deal
 // in the Software without restriction, including without limitation the rights
@@ -33,25 +33,26 @@ namespace CAULDRON_DX12
         virtual void            OnDestroy();
 
         // different ways to init a texture
-        virtual bool InitFromFile(Device* pDevice, UploadHeap* pUploadHeap, const char *szFilename, bool useSRGB = false, float cutOff = 1.0f);
-        INT32 Init(Device* pDevice, const char *pDebugName, const CD3DX12_RESOURCE_DESC *pDesc, D3D12_RESOURCE_STATES initialState, const D3D12_CLEAR_VALUE *pClearValue);
-        INT32 InitRenderTarget(Device* pDevice, const char *pDebugName, const CD3DX12_RESOURCE_DESC *pDesc, D3D12_RESOURCE_STATES initialState = D3D12_RESOURCE_STATE_RENDER_TARGET);
-        INT32 InitDepthStencil(Device* pDevice, const char *pDebugName, const CD3DX12_RESOURCE_DESC *pDesc);
-        bool InitBuffer(Device* pDevice, const char *pDebugName, const CD3DX12_RESOURCE_DESC *pDesc, uint32_t structureSize, D3D12_RESOURCE_STATES state);     // structureSize needs to be 0 if using a valid DXGI_FORMAT
-        bool InitCounter(Device* pDevice, const char *pDebugName, const CD3DX12_RESOURCE_DESC *pCounterDesc, uint32_t counterSize, D3D12_RESOURCE_STATES state);
-        bool InitFromData(Device* pDevice, const char *pDebugName, UploadHeap& uploadHeap, const IMG_INFO& header, const void* data);
+        virtual bool InitFromFile(Device *pDevice, UploadHeap *pUploadHeap, const char *szFilename, bool useSRGB = false, float cutOff = 1.0f, D3D12_RESOURCE_FLAGS resourceFlags = D3D12_RESOURCE_FLAG_NONE);
+        INT32 Init(Device *pDevice, const char *pDebugName, const CD3DX12_RESOURCE_DESC *pDesc, D3D12_RESOURCE_STATES initialState, const D3D12_CLEAR_VALUE *pClearValue);
+        INT32 InitRenderTarget(Device *pDevice, const char *pDebugName, const CD3DX12_RESOURCE_DESC *pDesc, D3D12_RESOURCE_STATES initialState = D3D12_RESOURCE_STATE_RENDER_TARGET, const FLOAT *clearColor = nullptr);
+        INT32 InitDepthStencil(Device *pDevice, const char *pDebugName, const CD3DX12_RESOURCE_DESC *pDesc, float clearValue);
+        bool InitBuffer(Device *pDevice, const char *pDebugName, const CD3DX12_RESOURCE_DESC *pDesc, uint32_t structureSize, D3D12_RESOURCE_STATES state);     // structureSize needs to be 0 if using a valid DXGI_FORMAT
+        bool InitCounter(Device *pDevice, const char *pDebugName, const CD3DX12_RESOURCE_DESC *pCounterDesc, uint32_t counterSize, D3D12_RESOURCE_STATES state);
+        bool InitFromData(Device *pDevice, const char *pDebugName, UploadHeap& uploadHeap, const IMG_INFO& header, const void *data);
 
         // explicit functions for creating RTVs, SRVs and UAVs
         void CreateRTV(uint32_t index, RTV *pRV, D3D12_RENDER_TARGET_VIEW_DESC *pRtvDesc);
         void CreateSRV(uint32_t index, CBV_SRV_UAV *pRV, D3D12_SHADER_RESOURCE_VIEW_DESC *pSrvDesc);
         void CreateUAV(uint32_t index, Texture *pCounterTex, CBV_SRV_UAV *pRV, D3D12_UNORDERED_ACCESS_VIEW_DESC *pUavDesc);
-
+        void CreateRawBufferUAV(uint32_t index, Texture *pCounterTex, CBV_SRV_UAV *pRV);
+        
         // less explicit functions of the above ones
-        void CreateDSV(uint32_t index, DSV *pRV, int arraySlice = 1);
+        void CreateDSV(uint32_t index, DSV *pRV, int arraySlice = -1, int arraySize = 1);
         void CreateUAV(uint32_t index, CBV_SRV_UAV *pRV, int mipLevel = -1);
         void CreateBufferUAV(uint32_t index, Texture *pCounterTex, CBV_SRV_UAV *pRV);
-        void CreateRTV(uint32_t index, RTV *pRV, int mipLevel = -1, int arraySize = -1, int firstArraySlice = -1);
-        void CreateSRV(uint32_t index, CBV_SRV_UAV *pRV, int mipLevel = -1, int arraySize = -1, int firstArraySlice = -1);        
+        void CreateRTV(uint32_t index, RTV *pRV, int mipLevel = -1, int arraySize = -1, int firstArraySlice = -1, DXGI_FORMAT format = DXGI_FORMAT_UNKNOWN);
+        void CreateSRV(uint32_t index, CBV_SRV_UAV *pRV, int mipLevel = -1, int arraySize = -1, int firstArraySlice = -1);
         void CreateCubeSRV(uint32_t index, CBV_SRV_UAV *pRV);
 
         // accessors
@@ -63,8 +64,8 @@ namespace CAULDRON_DX12
         uint32_t GetArraySize() const { return m_header.arraySize; }
 
     protected:
-        void CreateTextureCommitted(Device* pDevice, const char *pDebugName, bool useSRGB = false);
-        void LoadAndUpload(Device* pDevice, UploadHeap* pUploadHeap, ImgLoader *pDds, ID3D12Resource *pRes);
+        void CreateTextureCommitted(Device *pDevice, const char *pDebugName, bool useSRGB = false, D3D12_RESOURCE_FLAGS resourceFlags = D3D12_RESOURCE_FLAG_NONE);
+        void LoadAndUpload(Device *pDevice, UploadHeap *pUploadHeap, ImgLoader *pDds, ID3D12Resource *pRes);
 
         ID3D12Resource*         m_pResource = nullptr;
 

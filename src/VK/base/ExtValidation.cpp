@@ -1,4 +1,4 @@
-// AMD AMDUtils code
+// AMD Cauldron code
 // 
 // Copyright(c) 2018 Advanced Micro Devices, Inc.All rights reserved.
 // Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -48,23 +48,23 @@ namespace CAULDRON_VK
         return VK_FALSE;
     }
 
-    VkValidationFeatureEnableEXT enables[] = { VK_VALIDATION_FEATURE_ENABLE_GPU_ASSISTED_EXT };
+    const VkValidationFeatureEnableEXT featuresRequested[] = { VK_VALIDATION_FEATURE_ENABLE_GPU_ASSISTED_EXT, VK_VALIDATION_FEATURE_ENABLE_SYNCHRONIZATION_VALIDATION_EXT, VK_VALIDATION_FEATURE_ENABLE_BEST_PRACTICES_EXT };
     VkValidationFeaturesEXT features = {};
 
     const char instanceExtensionName[] = VK_EXT_DEBUG_REPORT_EXTENSION_NAME;
-    const char instanceLayerName[] = "VK_LAYER_LUNARG_standard_validation";
+    const char instanceLayerName[] = "VK_LAYER_KHRONOS_validation";
 
-    bool ExtDebugReportCheckInstanceExtensions(InstanceProperties *pIP, void **pNext)
+    bool ExtDebugReportCheckInstanceExtensions(InstanceProperties *pIP, bool gpuValidation)
     {
         s_bCanUseDebugReport = pIP->AddInstanceLayerName(instanceLayerName) && pIP->AddInstanceExtensionName(instanceExtensionName);
-        if (s_bCanUseDebugReport)
+        if (s_bCanUseDebugReport && gpuValidation)
         {
             features.sType = VK_STRUCTURE_TYPE_VALIDATION_FEATURES_EXT;
-            features.pNext = *pNext;
-            features.enabledValidationFeatureCount = 1;
-            features.pEnabledValidationFeatures = enables;
+            features.pNext = pIP->GetNext();
+            features.enabledValidationFeatureCount = _countof( featuresRequested );
+            features.pEnabledValidationFeatures = featuresRequested;
 
-            *pNext = &features;
+            pIP->SetNewNext(&features);
         }
 
         return s_bCanUseDebugReport;

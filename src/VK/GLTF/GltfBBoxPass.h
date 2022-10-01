@@ -1,4 +1,4 @@
-// AMD AMDUtils code
+// AMD Cauldron code
 // 
 // Copyright(c) 2018 Advanced Micro Devices, Inc.All rights reserved.
 // Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -37,12 +37,15 @@ namespace CAULDRON_VK
             DynamicBufferRing *pDynamicBufferRing,
             StaticBufferPool *pStaticBufferPool,
             GLTFTexturesAndBuffers *pGLTFTexturesAndBuffers,
-            VkSampleCountFlagBits sampleCount);
+            Wireframe *pWireframe);
 
         void OnDestroy();
-        void Draw(VkCommandBuffer cmd_buf, XMMATRIX cameraViewProjMatrix);
+        void Draw(VkCommandBuffer cmd_buf, const math::Matrix4& cameraViewProjMatrix, const math::Vector4& color);
+        inline void Draw(VkCommandBuffer cmd_buf, const math::Matrix4& cameraViewProjMatrix) { Draw(cmd_buf, cameraViewProjMatrix, math::Vector4(1.0f, 1.0f, 1.0f, 1.0f)); }
     private:
         GLTFTexturesAndBuffers *m_pGLTFTexturesAndBuffers;
+
+        Wireframe *m_pWireframe;
         WireframeBox m_wireframeBox;
     };
 }

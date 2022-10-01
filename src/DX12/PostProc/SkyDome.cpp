@@ -1,4 +1,4 @@
-// AMD AMDUtils code
+// AMD Cauldron code
 // 
 // Copyright(c) 2019 Advanced Micro Devices, Inc.All rights reserved.
 // Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -25,7 +25,7 @@
 
 namespace CAULDRON_DX12
 {
-    void SkyDome::OnCreate(Device* pDevice, UploadHeap* pUploadHeap, ResourceViewHeaps *pResourceViewHeaps, DynamicBufferRing *pDynamicBufferRing, StaticBufferPool  *pStaticBufferPool, char *pDiffuseCubemap, char *pSpecularCubemap, DXGI_FORMAT outFormat, uint32_t sampleDescCount)
+    void SkyDome::OnCreate(Device* pDevice, UploadHeap* pUploadHeap, ResourceViewHeaps *pResourceViewHeaps, DynamicBufferRing *pDynamicBufferRing, StaticBufferPool  *pStaticBufferPool, const char *pDiffuseCubemap, const char *pSpecularCubemap, DXGI_FORMAT outFormat, uint32_t sampleDescCount, bool bInvertedDepth)
     {
         m_pDynamicBufferRing = pDynamicBufferRing;
         
@@ -39,10 +39,11 @@ namespace CAULDRON_DX12
         SetDescriptorSpec(0, &m_CubeSpecularTextureSRV, 0, &SamplerDesc);
 
         D3D12_DEPTH_STENCIL_DESC DepthStencilDesc = CD3DX12_DEPTH_STENCIL_DESC(D3D12_DEFAULT);
-        DepthStencilDesc.DepthFunc = D3D12_COMPARISON_FUNC_LESS_EQUAL;
+        DepthStencilDesc.DepthFunc = D3D12_COMPARISON_FUNC_EQUAL;
         DepthStencilDesc.DepthWriteMask = D3D12_DEPTH_WRITE_MASK_ZERO;
 
-        m_skydome.OnCreate(pDevice, "SkyDome.hlsl", pResourceViewHeaps, pStaticBufferPool, 1, 1, &SamplerDesc, outFormat, sampleDescCount);
+        D3D12_BLEND_DESC blendDesc = CD3DX12_BLEND_DESC(D3D12_DEFAULT);
+        m_skydome.OnCreate(pDevice, "SkyDome.hlsl", pResourceViewHeaps, pStaticBufferPool, 1, 1, &SamplerDesc, outFormat, sampleDescCount, &blendDesc, &DepthStencilDesc, 1, "-T vs_6_0", "-T ps_6_0", bInvertedDepth);
     }
 
     void SkyDome::OnDestroy()
@@ -95,14 +96,11 @@ namespace CAULDRON_DX12
         pSamplerDesc->ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
     }
 
-    void SkyDome::Draw(ID3D12GraphicsCommandList* pCommandList, XMMATRIX& invViewProj)
+    void SkyDome::Draw(ID3D12GraphicsCommandList* pCommandList, const math::Matrix4& invViewProj)
     {
         UserMarker marker(pCommandList, "Skydome");
 
-        XMMATRIX *cbPerDraw;
-        D3D12_GPU_VIRTUAL_ADDRESS constantBuffer;
-        m_pDynamicBufferRing->AllocConstantBuffer(sizeof(XMMATRIX), (void **)&cbPerDraw, &constantBuffer);
-        *cbPerDraw = invViewProj;
+        D3D12_GPU_VIRTUAL_ADDRESS constantBuffer = m_pDynamicBufferRing->AllocConstantBuffer(sizeof(math::Matrix4), &invViewProj);
 
         m_skydome.Draw(pCommandList, 1, &m_CubeSpecularTextureSRV, constantBuffer);
     }

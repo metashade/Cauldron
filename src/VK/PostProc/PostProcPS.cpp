@@ -1,4 +1,4 @@
-// AMD AMDUtils code
+// AMD Cauldron code
 // 
 // Copyright(c) 2018 Advanced Micro Devices, Inc.All rights reserved.
 // Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -18,6 +18,7 @@
 // THE SOFTWARE.
 
 #include "stdafx.h"
+#include "Base/ExtDebugUtils.h"
 #include "Base/DynamicBufferRing.h"
 #include "Base/StaticBufferPool.h"
 #include "Base/ResourceViewHeaps.h"
@@ -39,47 +40,54 @@ namespace CAULDRON_VK
         Device* pDevice,
         VkRenderPass renderPass,
         const std::string &shaderFilename,
+        const std::string &shaderEntryPoint,
+        const std::string &shaderCompilerParams,
         StaticBufferPool *pStaticBufferPool,
         DynamicBufferRing *pDynamicBufferRing,
         VkDescriptorSetLayout descriptorSetLayout,
         VkPipelineColorBlendStateCreateInfo *pBlendDesc,
-        VkSampleCountFlagBits sampleDescCount
+        VkSampleCountFlagBits sampleDescCount,
+        bool invertedDepth 
     )
     {
         m_pDevice = pDevice;
 
-        float vertices[] = {
-            -1,  1,  1,  0, 0,
-             3,  1,  1,  2, 0,
-            -1, -3,  1,  0, 2,
-        };
-        pStaticBufferPool->AllocBuffer(3, 5 * sizeof(float), vertices, &m_verticesView);
-
         // Create the vertex shader
         static const char* vertexShader =
-            "#version 400\n"
-            "#extension GL_ARB_separate_shader_objects : enable\n"
-            "#extension GL_ARB_shading_language_420pack : enable\n"
-            "layout (location = 0) in vec3 pos;\n"
-            "layout (location = 1) in vec2 inTexCoord;\n"
-            "layout (location = 0) out vec2 outTexCoord;\n"
-            "void main() {\n"
-            "   outTexCoord = inTexCoord;\n"
-            "   gl_Position = vec4(pos, 1.0f);\n"
-            "}\n";
+            "static const float4 FullScreenVertsPos[3] = { float4(-1, 1, FAR_DEPTH, 1), float4(3, 1, FAR_DEPTH, 1), float4(-1, -3, FAR_DEPTH, 1) };\
+            static const float2 FullScreenVertsUVs[3] = { float2(0, 0), float2(2, 0), float2(0, 2) };\
+            struct VERTEX_OUT\
+            {\
+                float2 vTexture : TEXCOORD;\
+                float4 vPosition : SV_POSITION;\
+            };\
+            VERTEX_OUT mainVS(uint vertexId : SV_VertexID)\
+            {\
+                VERTEX_OUT Output;\
+                Output.vPosition = FullScreenVertsPos[vertexId];\
+                Output.vTexture = FullScreenVertsUVs[vertexId];\
+                return Output;\
+            }";
 
         VkResult res;
 
         // Compile shaders
         //
         DefineList attributeDefines;
+        attributeDefines["FAR_DEPTH"] = invertedDepth ? "0" : "1";
 
         VkPipelineShaderStageCreateInfo m_vertexShader;
-        res = VKCompileFromString(m_pDevice->GetDevice(), SST_GLSL, VK_SHADER_STAGE_VERTEX_BIT, vertexShader, "main", &attributeDefines, &m_vertexShader);
+#ifdef _DEBUG
+        std::string CompileFlagsVS("-T vs_6_0 -Zi -Od");
+#else
+        std::string CompileFlagsVS("-T vs_6_0");
+#endif // _DEBUG
+        res = VKCompileFromString(m_pDevice->GetDevice(), SST_HLSL, VK_SHADER_STAGE_VERTEX_BIT, vertexShader, "mainVS", CompileFlagsVS.c_str(), &attributeDefines, &m_vertexShader);
         assert(res == VK_SUCCESS);
 
+        m_fragmentShaderName = shaderEntryPoint;
         VkPipelineShaderStageCreateInfo m_fragmentShader;
-        res = VKCompileFromFile(m_pDevice->GetDevice(), VK_SHADER_STAGE_FRAGMENT_BIT, shaderFilename.c_str(), "main", &attributeDefines, &m_fragmentShader);
+        res = VKCompileFromFile(m_pDevice->GetDevice(), VK_SHADER_STAGE_FRAGMENT_BIT, shaderFilename.c_str(), m_fragmentShaderName.c_str(), shaderCompilerParams.c_str(), &attributeDefines, &m_fragmentShader);
         assert(res == VK_SUCCESS);
 
         m_shaderStages.clear();
@@ -120,30 +128,16 @@ namespace CAULDRON_VK
 
         VkResult res;
 
-        /////////////////////////////////////////////
-        // vertex input state
-
-        VkVertexInputBindingDescription vi_binding = {};
-        vi_binding.binding = 0;
-        vi_binding.stride = sizeof(float) * 5;
-        vi_binding.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
-
-        VkVertexInputAttributeDescription vi_attrs[] =
-        {
-            { 0, 0, VK_FORMAT_R32G32B32_SFLOAT, 0 },
-            { 1, 0, VK_FORMAT_R32G32_SFLOAT, sizeof(float) * 3 },
-        };
-
         // input assembly state and layout
 
         VkPipelineVertexInputStateCreateInfo vi = {};
         vi.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
         vi.pNext = NULL;
         vi.flags = 0;
-        vi.vertexBindingDescriptionCount = 1;
-        vi.pVertexBindingDescriptions = &vi_binding;
-        vi.vertexAttributeDescriptionCount = _countof(vi_attrs);
-        vi.pVertexAttributeDescriptions = vi_attrs;            
+        vi.vertexBindingDescriptionCount = 0;
+        vi.pVertexBindingDescriptions = nullptr;
+        vi.vertexAttributeDescriptionCount = 0;
+        vi.pVertexAttributeDescriptions = nullptr;
 
         VkPipelineInputAssemblyStateCreateInfo ia;
         ia.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
@@ -222,9 +216,9 @@ namespace CAULDRON_VK
         ds.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
         ds.pNext = NULL;
         ds.flags = 0;
-        ds.depthTestEnable = VK_FALSE;
+        ds.depthTestEnable = VK_TRUE;
         ds.depthWriteEnable = VK_FALSE;
-        ds.depthCompareOp = VK_COMPARE_OP_LESS_OR_EQUAL;
+        ds.depthCompareOp = VK_COMPARE_OP_EQUAL;
         ds.depthBoundsTestEnable = VK_FALSE;
         ds.stencilTestEnable = VK_FALSE;
         ds.back.failOp = VK_STENCIL_OP_KEEP;
@@ -277,6 +271,7 @@ namespace CAULDRON_VK
 
         res = vkCreateGraphicsPipelines(m_pDevice->GetDevice(), m_pDevice->GetPipelineCache(), 1, &pipeline, NULL, &m_pipeline);
         assert(res == VK_SUCCESS);
+        SetResourceName(m_pDevice->GetDevice(), VK_OBJECT_TYPE_PIPELINE, (uint64_t)m_pipeline, "cacaca P");
     }
 
     //--------------------------------------------------------------------------------------
@@ -304,25 +299,23 @@ namespace CAULDRON_VK
     // OnDraw
     //
     //--------------------------------------------------------------------------------------    
-    void PostProcPS::Draw(VkCommandBuffer cmd_buf, VkDescriptorBufferInfo constantBuffer, VkDescriptorSet descriptorSet)
+    void PostProcPS::Draw(VkCommandBuffer cmd_buf, VkDescriptorBufferInfo *pConstantBuffer, VkDescriptorSet descriptorSet)
     {
         if (m_pipeline == VK_NULL_HANDLE)
             return;
 
-        // Bind vertices 
-        //
-        vkCmdBindVertexBuffers(cmd_buf, 0, 1, &m_verticesView.buffer, &m_verticesView.offset);
-
         // Bind Descriptor sets
         //                
-        VkDescriptorSet descritorSets[1] = { descriptorSet };
-        int numUniformOffsets = 1;
-        if (constantBuffer.buffer == NULL)
+        int numUniformOffsets = 0;
+        uint32_t uniformOffset = 0;
+        if (pConstantBuffer != NULL && pConstantBuffer->buffer != NULL)
         {
-            numUniformOffsets = 0;
+            numUniformOffsets = 1;
+            uniformOffset = (uint32_t)pConstantBuffer->offset;
         }
-        uint32_t uniformOffsets[1] = { (uint32_t)constantBuffer.offset };
-        vkCmdBindDescriptorSets(cmd_buf, VK_PIPELINE_BIND_POINT_GRAPHICS, m_pipelineLayout, 0, 1, descritorSets, numUniformOffsets, uniformOffsets);
+
+        VkDescriptorSet descritorSets[1] = { descriptorSet };
+        vkCmdBindDescriptorSets(cmd_buf, VK_PIPELINE_BIND_POINT_GRAPHICS, m_pipelineLayout, 0, 1, descritorSets, numUniformOffsets, &uniformOffset);
 
         // Bind Pipeline
         //

@@ -1,4 +1,4 @@
-// AMD AMDUtils code
+// AMD Cauldron code
 // 
 // Copyright(c) 2018 Advanced Micro Devices, Inc.All rights reserved.
 // Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -20,7 +20,7 @@
 #pragma once
 
 #include "Device.h"
-#include "FreeSync2.h"
+#include "FreeSyncHDR.h"
 
 namespace CAULDRON_VK
 {
@@ -30,27 +30,27 @@ namespace CAULDRON_VK
         void OnCreate(Device *pDevice, uint32_t numberBackBuffers, HWND hWnd);
         void OnDestroy();
         
-        void OnCreateWindowSizeDependentResources(uint32_t dwWidth, uint32_t dwHeight, bool bVSyncOn, DisplayModes displayMode = DISPLAYMODE_SDR);
+        void OnCreateWindowSizeDependentResources(uint32_t dwWidth, uint32_t dwHeight, bool bVSyncOn, DisplayMode displayMode = DISPLAYMODE_SDR, PresentationMode fullscreenMode = PRESENTATIONMODE_WINDOWED, bool enableLocalDimming = true);
         void OnDestroyWindowSizeDependentResources();
 
         void SetFullScreen(bool fullscreen);
 
-        bool IsModeSupported(DisplayModes displayMode);
-        void EnumerateDisplayModes(std::vector<DisplayModes> *pModes, std::vector<const char *> *pNames = NULL);
+        bool IsModeSupported(DisplayMode displayMode, PresentationMode fullscreenMode = PRESENTATIONMODE_WINDOWED, bool enableLocalDimming = true);
+        void EnumerateDisplayModes(std::vector<DisplayMode>* pModes, std::vector<const char*>* pNames = NULL, bool includeFreesyncHDR = false, PresentationMode fullscreenMode = PRESENTATIONMODE_WINDOWED, bool enableLocalDimming = true);
 
         void GetSemaphores(VkSemaphore *pImageAvailableSemaphore, VkSemaphore *pRenderFinishedSemaphores, VkFence *pCmdBufExecutedFences);
-        void Present();
+        VkResult Present();
         uint32_t WaitForSwapChain();
 
         // getters
         VkImage GetCurrentBackBuffer();
         VkImageView GetCurrentBackBufferRTV();
-        bool IsFullScreen() const { return m_isFullScreen; }
         VkSwapchainKHR GetSwapChain() const { return m_swapChain; }
         VkFormat GetFormat() const { return m_swapChainFormat.format; };
         VkRenderPass GetRenderPass() { return m_render_pass_swap_chain; };
-        DisplayModes GetDisplayMode() { return m_displayMode; }
+        DisplayMode GetDisplayMode() { return m_displayMode; }
         VkFramebuffer GetFramebuffer(int i) const { return m_framebuffers[i]; }
+        VkFramebuffer GetCurrentFramebuffer() const { return m_framebuffers[m_imageIndex]; }
 
     private:
         void CreateRTV();
@@ -68,7 +68,7 @@ namespace CAULDRON_VK
 
         VkQueue m_presentQueue;
 
-        DisplayModes m_displayMode = DISPLAYMODE_SDR;
+        DisplayMode m_displayMode = DISPLAYMODE_SDR;
         VkRenderPass m_render_pass_swap_chain = VK_NULL_HANDLE;
 
         std::vector<VkImage> m_images;
@@ -80,19 +80,8 @@ namespace CAULDRON_VK
         std::vector<VkSemaphore>   m_RenderFinishedSemaphores;
 
         uint32_t m_imageIndex = 0;
-        uint32_t m_prevImageIndex = 0;
         uint32_t m_backBufferCount;
-
-        // fullscreen/windowed vars
-        bool m_isFullScreen = false;
-        struct SavedWindowInfo
-        {
-            LONG_PTR Style;
-            LONG_PTR ExStyle;
-            bool IsMaximized;
-            RECT WindowRect;
-        };
-        SavedWindowInfo m_windowedState = {};
+        uint32_t m_semaphoreIndex, m_prevSemaphoreIndex;
 
         bool m_bVSyncOn = false;
     };

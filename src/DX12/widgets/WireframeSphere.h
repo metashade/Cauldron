@@ -1,6 +1,6 @@
-// AMD AMDUtils code
+// AMD Cauldron code
 // 
-// Copyright(c) 2018 Advanced Micro Devices, Inc.All rights reserved.
+// Copyright(c) 2020 Advanced Micro Devices, Inc.All rights reserved.
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files(the "Software"), to deal
 // in the Software without restriction, including without limitation the rights
@@ -23,7 +23,7 @@
 
 namespace CAULDRON_DX12
 {
-    class WireframeBox : public Wireframe
+    class WireframeSphere : public Wireframe
     {
         // all bounding boxes of all the meshes use the same geometry, shaders and pipelines.
         uint32_t m_NumIndices;
@@ -47,7 +47,7 @@ namespace CAULDRON_DX12
             pStaticBufferPool->AllocVertexBuffer((uint32_t)(vertices.size() / 3), 3 * sizeof(float), vertices.data(), &m_VBV);
         }
 
-        void Draw(ID3D12GraphicsCommandList* pCommandList, Wireframe *pWireframe, XMMATRIX worldMatrix, XMVECTOR vCenter, XMVECTOR vRadius, XMVECTOR vColor)
+        void Draw(ID3D12GraphicsCommandList* pCommandList, Wireframe *pWireframe, const math::Matrix4& worldMatrix, const math::Vector4& vCenter, const math::Vector4& vRadius, const math::Vector4& vColor)
         {
             pWireframe->Draw(pCommandList, m_NumIndices, m_IBV, m_VBV, worldMatrix, vCenter, vRadius, vColor);
         }

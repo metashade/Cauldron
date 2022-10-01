@@ -1,6 +1,6 @@
-// AMD AMDUtils code
+// AMD Cauldron code
 // 
-// Copyright(c) 2018 Advanced Micro Devices, Inc.All rights reserved.
+// Copyright(c) 2020 Advanced Micro Devices, Inc.All rights reserved.
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files(the "Software"), to deal
 // in the Software without restriction, including without limitation the rights
@@ -23,21 +23,14 @@
 
 namespace CAULDRON_DX12
 {
-    Wireframe::Wireframe()
-    {
-    }
-
-    Wireframe::~Wireframe()
-    {
-    }
-
     void Wireframe::OnCreate(
         Device* pDevice,
         ResourceViewHeaps *pHeaps,
         DynamicBufferRing *pDynamicBufferRing,
         StaticBufferPool *pStaticBufferPool,
         DXGI_FORMAT outFormat,
-        uint32_t sampleDescCount)
+        uint32_t sampleDescCount,
+        bool bInvertedDepth)
     {
         m_pResourceViewHeaps = pHeaps;
         m_pDynamicBufferRing = pDynamicBufferRing;
@@ -90,8 +83,8 @@ namespace CAULDRON_DX12
 
         D3D12_SHADER_BYTECODE shaderVert, shaderPixel;
         {
-            CompileShaderFromString(vertexShader, NULL, "mainVS", "vs_5_0", 0, 0, &shaderVert);
-            CompileShaderFromString(pixelShader, NULL, "mainPS", "ps_5_0", 0, 0, &shaderPixel);
+            CompileShaderFromString(vertexShader, NULL, "mainVS", "-T vs_6_0", &shaderVert);
+            CompileShaderFromString(pixelShader, NULL, "mainPS", "-T ps_6_0", &shaderPixel);
         }
 
         /////////////////////////////////////////////
@@ -150,7 +143,7 @@ namespace CAULDRON_DX12
         descPso.RasterizerState.AntialiasedLineEnable = TRUE;
         descPso.BlendState = CD3DX12_BLEND_DESC(D3D12_DEFAULT);
         descPso.DepthStencilState = CD3DX12_DEPTH_STENCIL_DESC(D3D12_DEFAULT);
-        descPso.DepthStencilState.DepthFunc = D3D12_COMPARISON_FUNC_LESS;
+        descPso.DepthStencilState.DepthFunc = bInvertedDepth ? D3D12_COMPARISON_FUNC_GREATER : D3D12_COMPARISON_FUNC_LESS;
         descPso.SampleMask = UINT_MAX;
         descPso.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_LINE;
         descPso.NumRenderTargets = 1;
@@ -170,7 +163,7 @@ namespace CAULDRON_DX12
         m_RootSignature->Release();
     }
 
-    void Wireframe::Draw(ID3D12GraphicsCommandList* pCommandList, int numIndices, D3D12_INDEX_BUFFER_VIEW IBV, D3D12_VERTEX_BUFFER_VIEW VBV, XMMATRIX WorldViewProj, XMVECTOR vCenter, XMVECTOR vRadius, XMVECTOR vColor)
+    void Wireframe::Draw(ID3D12GraphicsCommandList* pCommandList, int numIndices, D3D12_INDEX_BUFFER_VIEW IBV, D3D12_VERTEX_BUFFER_VIEW VBV, const math::Matrix4& WorldViewProj, const math::Vector4& vCenter, const math::Vector4& vRadius, const math::Vector4& vColor)
     {
         ID3D12DescriptorHeap *pDescriptorHeaps[] = { m_pResourceViewHeaps->GetCBV_SRV_UAVHeap() };
 
@@ -183,13 +176,12 @@ namespace CAULDRON_DX12
 
         // Set per Object constants
         //
-        per_object *cbPerObject;
-        D3D12_GPU_VIRTUAL_ADDRESS perObjectDesc;
-        m_pDynamicBufferRing->AllocConstantBuffer(sizeof(per_object), (void **)&cbPerObject, &perObjectDesc);
-        cbPerObject->m_mWorldViewProj = WorldViewProj;
-        cbPerObject->m_vCenter = vCenter;
-        cbPerObject->m_vRadius = vRadius;
-        cbPerObject->m_vColor = vColor;
+        per_object cbPerObject;
+        cbPerObject.m_mWorldViewProj = WorldViewProj;
+        cbPerObject.m_vCenter = vCenter;
+        cbPerObject.m_vRadius = vRadius;
+        cbPerObject.m_vColor = vColor;
+        D3D12_GPU_VIRTUAL_ADDRESS perObjectDesc = m_pDynamicBufferRing->AllocConstantBuffer(sizeof(per_object), &cbPerObject);
 
         pCommandList->SetGraphicsRootConstantBufferView(0, perObjectDesc);
 

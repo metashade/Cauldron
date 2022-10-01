@@ -1,6 +1,6 @@
-// AMD AMDUtils code
+// AMD Cauldron code
 // 
-// Copyright(c) 2018 Advanced Micro Devices, Inc.All rights reserved.
+// Copyright(c) 2020 Advanced Micro Devices, Inc.All rights reserved.
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files(the "Software"), to deal
 // in the Software without restriction, including without limitation the rights
@@ -30,22 +30,19 @@ namespace CAULDRON_DX12
     class Wireframe
     {
     public:
-        Wireframe();
-
-        ~Wireframe();
-
         void OnCreate(
             Device* pDevice,
             ResourceViewHeaps *pHeaps,
             DynamicBufferRing *pDynamicBufferRing,
             StaticBufferPool *pStaticBufferPool,
             DXGI_FORMAT outFormat,
-            uint32_t sampleDescCount);
+            uint32_t sampleDescCount,
+            bool bInvertedDepth = false);
 
         void OnDestroy();
-        void Draw(ID3D12GraphicsCommandList* pCommandList, int numIndices, D3D12_INDEX_BUFFER_VIEW IBV, D3D12_VERTEX_BUFFER_VIEW VBV, XMMATRIX WorldViewProj, XMVECTOR vCenter, XMVECTOR vRadius, XMVECTOR vColor);
-    private:
+        void Draw(ID3D12GraphicsCommandList* pCommandList, int numIndices, D3D12_INDEX_BUFFER_VIEW IBV, D3D12_VERTEX_BUFFER_VIEW VBV, const math::Matrix4& WorldViewProj, const math::Vector4& vCenter, const math::Vector4& vRadius, const math::Vector4& vColor);
 
+    private:
         DynamicBufferRing *m_pDynamicBufferRing;
         ResourceViewHeaps *m_pResourceViewHeaps;
 
@@ -54,10 +51,10 @@ namespace CAULDRON_DX12
 
         struct per_object
         {
-            XMMATRIX m_mWorldViewProj;
-            XMVECTOR m_vCenter;
-            XMVECTOR m_vRadius;
-            XMVECTOR m_vColor;
+            math::Matrix4 m_mWorldViewProj;
+            math::Vector4 m_vCenter;
+            math::Vector4 m_vRadius;
+            math::Vector4 m_vColor;
         };
     };
 }

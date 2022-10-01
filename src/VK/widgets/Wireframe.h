@@ -1,4 +1,4 @@
-// AMD AMDUtils code
+// AMD Cauldron code
 // 
 // Copyright(c) 2018 Advanced Micro Devices, Inc.All rights reserved.
 // Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -33,25 +33,17 @@ namespace CAULDRON_VK
             ResourceViewHeaps *pHeaps,
             DynamicBufferRing *pDynamicBufferRing,
             StaticBufferPool *pStaticBufferPool,
-            std::vector<float> *pVertices,
-            std::vector<short> *pIndices,
-            VkSampleCountFlagBits sampleDescCount);
+            VkSampleCountFlagBits sampleDescCount,
+            bool invertedDepth = false);
 
         void OnDestroy();
-        void Draw(VkCommandBuffer cmd_buf, XMMATRIX worldMatrix, XMVECTOR vCenter, XMVECTOR vRadius, XMVECTOR vColor);
-    protected:
+        void Draw(VkCommandBuffer cmd_buf, int numIndices, VkDescriptorBufferInfo IBV, VkDescriptorBufferInfo VBV, const math::Matrix4& worldMatrix, const math::Vector4& vCenter, const math::Vector4& vRadius, const math::Vector4& vColor);
 
+    private:
         Device* m_pDevice;
 
         DynamicBufferRing *m_pDynamicBufferRing;
-        StaticBufferPool *m_pStaticBufferPool;
         ResourceViewHeaps *m_pResourceViewHeaps;
-
-        // all bounding boxes of all the meshes use the same geometry, shaders and pipelines.
-        uint32_t m_NumIndices;
-        VkIndexType m_indexType;
-        VkDescriptorBufferInfo m_IBV;
-        VkDescriptorBufferInfo m_VBV;
 
         VkPipeline m_pipeline;
         VkPipelineLayout m_pipelineLayout;
@@ -59,12 +51,14 @@ namespace CAULDRON_VK
         VkDescriptorSet             m_descriptorSet;
         VkDescriptorSetLayout       m_descriptorSetLayout;
 
+        bool m_bInvertedDepth;
+
         struct per_object
         {
-            XMMATRIX m_mWorldViewProj;
-            XMVECTOR m_vCenter;
-            XMVECTOR m_vRadius;
-            XMVECTOR m_vColor;
+            math::Matrix4 m_mWorldViewProj;
+            math::Vector4 m_vCenter;
+            math::Vector4 m_vRadius;
+            math::Vector4 m_vColor;
         };
     };
 }

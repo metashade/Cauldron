@@ -1,6 +1,6 @@
-// AMD AMDUtils code
+// AMD Cauldron code
 // 
-// Copyright(c) 2018 Advanced Micro Devices, Inc.All rights reserved.
+// Copyright(c) 2020 Advanced Micro Devices, Inc.All rights reserved.
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files(the "Software"), to deal
 // in the Software without restriction, including without limitation the rights
@@ -29,8 +29,8 @@
 // http://go.microsoft.com/fwlink/?LinkID=615561
 //--------------------------------------------------------------------------------------
 
+#include "stdafx.h"
 #include "DxgiFormatHelper.h"
-#include <assert.h>
 
 //--------------------------------------------------------------------------------------
 // Return the BPP for a particular format
@@ -188,6 +188,9 @@ size_t GetPixelByteSize(DXGI_FORMAT fmt)
 {
     switch (fmt)
     {
+    case(DXGI_FORMAT_A8_UNORM):
+        return 1;
+
     case(DXGI_FORMAT_R10G10B10A2_TYPELESS):
     case(DXGI_FORMAT_R10G10B10A2_UNORM):
     case(DXGI_FORMAT_R10G10B10A2_UINT):
@@ -303,4 +306,9 @@ DXGI_FORMAT SetFormatGamma(DXGI_FORMAT format, bool addGamma)
     }
 
     return format;
+}
+
+bool IsBCFormat(DXGI_FORMAT format)
+{
+    return (format >= DXGI_FORMAT_BC1_TYPELESS && format <= DXGI_FORMAT_BC5_SNORM) || (format >= DXGI_FORMAT_BC6H_TYPELESS && format <= DXGI_FORMAT_BC7_UNORM_SRGB);
 }

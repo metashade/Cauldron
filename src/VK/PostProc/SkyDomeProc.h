@@ -1,4 +1,4 @@
-// AMD AMDUtils code
+// AMD Cauldron code
 // 
 // Copyright(c) 2018 Advanced Micro Devices, Inc.All rights reserved.
 // Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -20,6 +20,8 @@
 #pragma once
 #include "PostProcPS.h"
 
+#include "../../libs/vectormath/vectormath.hpp"
+
 namespace CAULDRON_VK
 {
     // This renders a procedural sky, see the SkyDomeProc.glsl for more references and credits
@@ -30,25 +32,18 @@ namespace CAULDRON_VK
 
         struct Constants
         {
-            XMMATRIX invViewProj;
-            XMVECTOR vSunDirection;
+            math::Matrix4 invViewProj;
+            math::Vector4 vSunDirection;
             float rayleigh;
             float turbidity;
             float mieCoefficient;
             float luminance;
             float mieDirectionalG;
-            bool  sun;
         };
 
-        void OnCreate(Device* pDevice, VkRenderPass renderPass, UploadHeap* pUploadHeap, VkFormat outFormat, ResourceViewHeaps *pResourceViewHeaps, DynamicBufferRing *pDynamicBufferRing, StaticBufferPool  *pStaticBufferPool, VkSampleCountFlagBits sampleDescCount);
+        void OnCreate(Device* pDevice, VkRenderPass renderPass, UploadHeap* pUploadHeap, VkFormat outFormat, ResourceViewHeaps *pResourceViewHeaps, DynamicBufferRing *pDynamicBufferRing, StaticBufferPool  *pStaticBufferPool, VkSampleCountFlagBits sampleDescCount, bool invertedDepth = false);
         void OnDestroy();
         void Draw(VkCommandBuffer cmd_buf, SkyDomeProc::Constants constants);
-
-        // TODO: This function members should generate a diffuse and specular cubemap to be used in IBL
-        void CreateDiffCubeSRV(uint32_t index, VkDescriptorSet descriptorSet);
-        void CreateSpecCubeSRV(uint32_t index, VkDescriptorSet descriptorSet);
-        void CreateBrdfSRV(uint32_t index, VkDescriptorSet descriptorSet);
-        void GenerateDiffuseMapFromEnvironmentMap();
 
     private:
         Device* m_pDevice;
@@ -61,5 +56,7 @@ namespace CAULDRON_VK
         PostProcPS  m_skydome;
 
         DynamicBufferRing *m_pDynamicBufferRing = NULL;
+
+        bool m_bInvertedDepth;
     };
 }

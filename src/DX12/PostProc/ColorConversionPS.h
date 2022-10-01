@@ -1,6 +1,6 @@
-// AMD AMDUtils code
+// AMD Cauldron code
 // 
-// Copyright(c) 2018 Advanced Micro Devices, Inc.All rights reserved.
+// Copyright(c) 2020 Advanced Micro Devices, Inc.All rights reserved.
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files(the "Software"), to deal
 // in the Software without restriction, including without limitation the rights
@@ -27,20 +27,21 @@ namespace CAULDRON_DX12
     public:
         void OnCreate(Device* pDevice, ResourceViewHeaps *pResourceViewHeaps, DynamicBufferRing *pDynamicBufferRing, StaticBufferPool  *pStaticBufferPool, DXGI_FORMAT outFormat);
         void OnDestroy();
-        void UpdatePipelines(DXGI_FORMAT outFormat, DisplayModes displayMode);
-        void Draw(ID3D12GraphicsCommandList* pCommandList, CBV_SRV_UAV *pHDRSRV);
+        void UpdatePipelines(DXGI_FORMAT outFormat, DisplayMode displayMode);
+        void Draw(ID3D12GraphicsCommandList* pCommandList, CBV_SRV_UAV *pHDRSRV, uint32_t isLPMToneMapperSelected = 0);
 
     private:
         PostProcPS m_ColorConversion;
 
         DynamicBufferRing *m_pDynamicBufferRing = NULL;
 
-        struct ColorConversionConsts 
+        struct ColorConversionConsts
         {
-            XMMATRIX m_contentToMonitorRecMatrix;
-            DisplayModes m_displayMode;
+            math::Matrix4 m_contentToMonitorRecMatrix;
+            DisplayMode m_displayMode;
             float m_displayMinLuminancePerNits;
             float m_displayMaxLuminancePerNits;
+            uint32_t m_isLPMToneMapperSelected;
         };
 
         ColorConversionConsts m_colorConversionConsts;

@@ -1,4 +1,4 @@
-// AMD AMDUtils code
+// AMD Cauldron code
 // 
 // Copyright(c) 2018 Advanced Micro Devices, Inc.All rights reserved.
 // Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -27,8 +27,8 @@ namespace CAULDRON_VK
     struct DepthMaterial
     {
         int m_textureCount = 0;
-        VkDescriptorSet m_descriptorSet;
-        VkDescriptorSetLayout m_descriptorSetLayout;
+        VkDescriptorSet m_descriptorSet = VK_NULL_HANDLE;
+        VkDescriptorSetLayout m_descriptorSetLayout = VK_NULL_HANDLE;
 
         DefineList m_defines;
         bool m_doubleSided = false;
@@ -36,15 +36,15 @@ namespace CAULDRON_VK
 
     struct DepthPrimitives
     {
-        Geometry m_Geometry;
+        Geometry m_geometry;
 
         DepthMaterial *m_pMaterial = NULL;
 
-        VkPipeline m_pipeline;
-        VkPipelineLayout m_pipelineLayout;
+        VkPipeline m_pipeline = VK_NULL_HANDLE;
+        VkPipelineLayout m_pipelineLayout = VK_NULL_HANDLE;
 
-        VkDescriptorSet m_descriptorSet;
-        VkDescriptorSetLayout m_descriptorSetLayout;
+        VkDescriptorSet m_descriptorSet = VK_NULL_HANDLE;
+        VkDescriptorSetLayout m_descriptorSetLayout = VK_NULL_HANDLE;
     };
 
     struct DepthMesh
@@ -55,14 +55,9 @@ namespace CAULDRON_VK
     class GltfDepthPass
     {
     public:
-        struct per_frame
-        {
-            XMMATRIX mViewProj;
-        };
-
         struct per_object
         {
-            XMMATRIX mWorld;
+            math::Matrix4 mWorld;
         };
 
         void OnCreate(
@@ -72,10 +67,12 @@ namespace CAULDRON_VK
             ResourceViewHeaps *pHeaps,
             DynamicBufferRing *pDynamicBufferRing,
             StaticBufferPool *pStaticBufferPool,
-            GLTFTexturesAndBuffers *pGLTFTexturesAndBuffers);
+            GLTFTexturesAndBuffers *pGLTFTexturesAndBuffers,
+            AsyncPool *pAsyncPool = NULL,
+            bool invertedDepth = false);
 
         void OnDestroy();
-        GltfDepthPass::per_frame *SetPerFrameConstants();
+        per_frame *SetPerFrameConstants();
         void Draw(VkCommandBuffer cmd_buf);
     private:
         ResourceViewHeaps *m_pResourceViewHeaps;
@@ -87,14 +84,16 @@ namespace CAULDRON_VK
 
         DepthMaterial m_defaultMaterial;
 
-        Device* m_pDevice;
         GLTFTexturesAndBuffers *m_pGLTFTexturesAndBuffers;
-        VkRenderPass m_renderPass;
-        VkSampler m_sampler;
+        Device* m_pDevice;
+        VkRenderPass m_renderPass = VK_NULL_HANDLE;
+        VkSampler m_sampler = VK_NULL_HANDLE;
         VkDescriptorBufferInfo m_perFrameDesc;
 
-        void CreateDescriptors(Device* pDevice, int inverseMatrixBufferSize, DefineList *pAttributeDefines, DepthPrimitives *pPrimitive);
-        void CreatePipeline(Device* pDevice, std::vector<VkVertexInputAttributeDescription> layout, DefineList *pAttributeDefines, DepthPrimitives *pPrimitive);
+        bool                     m_bInvertedDepth;
+
+        void CreateDescriptors(int inverseMatrixBufferSize, DefineList *pAttributeDefines, DepthPrimitives *pPrimitive);
+        void CreatePipeline(std::vector<VkVertexInputAttributeDescription> layout, const DefineList &defines, DepthPrimitives *pPrimitive);
     };
 }
 

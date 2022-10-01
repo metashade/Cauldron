@@ -1,4 +1,4 @@
-// AMD AMDUtils code
+// AMD Cauldron code
 // 
 // Copyright(c) 2018 Advanced Micro Devices, Inc.All rights reserved.
 // Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -39,9 +39,7 @@ namespace CAULDRON_VK
         {
             VkCommandPoolCreateInfo cmd_pool_info = {};
             cmd_pool_info.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
-            cmd_pool_info.pNext = NULL;
             cmd_pool_info.queueFamilyIndex = m_pDevice->GetGraphicsQueueFamilyIndex();
-            cmd_pool_info.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
             res = vkCreateCommandPool(m_pDevice->GetDevice(), &cmd_pool_info, NULL, &m_commandPool);
             assert(res == VK_SUCCESS);
 
@@ -93,10 +91,8 @@ namespace CAULDRON_VK
 
         // Create fence
         {
-            VkFenceCreateInfo fence_ci;
+            VkFenceCreateInfo fence_ci = {};
             fence_ci.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
-            fence_ci.pNext = NULL;
-            fence_ci.flags = 0;
 
             res = vkCreateFence(m_pDevice->GetDevice(), &fence_ci, NULL, &m_fence);
             assert(res == VK_SUCCESS);
@@ -104,11 +100,8 @@ namespace CAULDRON_VK
 
         // Begin Command Buffer
         {
-            VkCommandBufferBeginInfo cmd_buf_info;
+            VkCommandBufferBeginInfo cmd_buf_info = {};
             cmd_buf_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-            cmd_buf_info.pNext = NULL;
-            cmd_buf_info.flags = VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT;
-            cmd_buf_info.pInheritanceInfo = NULL;
 
             res = vkBeginCommandBuffer(m_pCommandBuffer, &cmd_buf_info);
             assert(res == VK_SUCCESS);
@@ -122,9 +115,9 @@ namespace CAULDRON_VK
     //--------------------------------------------------------------------------------------
     void UploadHeap::OnDestroy()
     {
+        vkDestroyBuffer(m_pDevice->GetDevice(), m_buffer, NULL);
         vkUnmapMemory(m_pDevice->GetDevice(), m_deviceMemory);
         vkFreeMemory(m_pDevice->GetDevice(), m_deviceMemory, NULL);
-        vkDestroyBuffer(m_pDevice->GetDevice(), m_buffer, NULL);
 
         vkFreeCommandBuffers(m_pDevice->GetDevice(), m_commandPool, 1, &m_pCommandBuffer);
         vkDestroyCommandPool(m_pDevice->GetDevice(), m_commandPool, NULL);
@@ -139,19 +132,77 @@ namespace CAULDRON_VK
     //--------------------------------------------------------------------------------------
     UINT8* UploadHeap::Suballocate(SIZE_T uSize, UINT64 uAlign)
     {
-        m_pDataCur = reinterpret_cast<UINT8*>(AlignOffset(reinterpret_cast<SIZE_T>(m_pDataCur), uAlign));
-        uSize = AlignOffset(uSize, uAlign);
+        // wait until we are done flusing the heap
+        flushing.Wait();
 
-        // flush operations if we ran out of space in the heap
+        UINT8* pRet = NULL;
 
-        if ((m_pDataCur >= m_pDataEnd) || (m_pDataCur + uSize >= m_pDataEnd))
         {
-            return NULL;
+            std::unique_lock<std::mutex> lock(m_mutex);
+
+            // make sure resource (and its mips) would fit the upload heap, if not please make the upload heap bigger
+            assert(uSize < (size_t)(m_pDataEnd - m_pDataBegin));
+
+            m_pDataCur = reinterpret_cast<UINT8*>(AlignUp(reinterpret_cast<SIZE_T>(m_pDataCur), uAlign));
+            uSize = AlignUp(uSize, uAlign);
+
+            // return NULL if we ran out of space in the heap
+            if ((m_pDataCur >= m_pDataEnd) || (m_pDataCur + uSize >= m_pDataEnd))
+            {
+                return NULL;
+            }
+
+            pRet = m_pDataCur;
+            m_pDataCur += uSize;
         }
 
-        UINT8* pRet = m_pDataCur;
-        m_pDataCur += uSize;
         return pRet;
+    }
+
+    UINT8* UploadHeap::BeginSuballocate(SIZE_T uSize, UINT64 uAlign)
+    {
+        UINT8* pRes = NULL;
+
+        for (;;) {
+            pRes = Suballocate(uSize, uAlign);
+            if (pRes != NULL)
+            {
+                break;
+            }
+
+            FlushAndFinish();
+        }
+
+        allocating.Inc();
+
+        return pRes;
+    }
+
+    void UploadHeap::EndSuballocate()
+    {
+        allocating.Dec();
+    }
+
+
+    void UploadHeap::AddCopy(VkImage image, VkBufferImageCopy bufferImageCopy)
+    {
+        std::unique_lock<std::mutex> lock(m_mutex);
+        m_copies.push_back({ image, bufferImageCopy });
+    }
+
+    void UploadHeap::AddPreBarrier(VkImageMemoryBarrier imageMemoryBarrier)
+    {
+        std::unique_lock<std::mutex> lock(m_mutex);
+
+        m_toPreBarrier.push_back(imageMemoryBarrier);
+    }
+
+
+    void UploadHeap::AddPostBarrier(VkImageMemoryBarrier imageMemoryBarrier)
+    {
+        std::unique_lock<std::mutex> lock(m_mutex);
+
+        m_toPostBarrier.push_back(imageMemoryBarrier);
     }
 
     void UploadHeap::Flush()
@@ -171,18 +222,46 @@ namespace CAULDRON_VK
     // FlushAndFinish
     //
     //--------------------------------------------------------------------------------------
-    void UploadHeap::FlushAndFinish()
+    void UploadHeap::FlushAndFinish(bool bDoBarriers)
     {
-        VkResult res;
+        // make sure another thread is not already flushing
+        flushing.Wait();
 
+        // begins a critical section, and make sure no allocations happen while a thread is inside it
+        flushing.Inc();
+
+        // wait for pending allocations to finish
+        allocating.Wait();
+
+        std::unique_lock<std::mutex> lock(m_mutex);
         Flush();
+        Trace("flushing %i", m_copies.size());
+
+        //apply pre barriers in one go
+        if (m_toPreBarrier.size()>0)
+        {
+            vkCmdPipelineBarrier(GetCommandList(), VK_PIPELINE_STAGE_HOST_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, NULL, 0, NULL, (uint32_t)m_toPreBarrier.size(), m_toPreBarrier.data());
+            m_toPreBarrier.clear();
+        }
+
+        for (COPY c : m_copies)
+        {
+            vkCmdCopyBufferToImage(GetCommandList(), GetResource(), c.m_image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &c.m_bufferImageCopy);
+        }
+        m_copies.clear();
+
+        //apply post barriers in one go
+        if (m_toPostBarrier.size() > 0)
+        {
+            vkCmdPipelineBarrier(GetCommandList(), VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0, 0, NULL, 0, NULL, (uint32_t)m_toPostBarrier.size(), m_toPostBarrier.data());
+            m_toPostBarrier.clear();
+        }
 
         // Close 
-        res = vkEndCommandBuffer(m_pCommandBuffer);
+        VkResult res = vkEndCommandBuffer(m_pCommandBuffer);
         assert(res == VK_SUCCESS);
 
         // Submit
-
         const VkCommandBuffer cmd_bufs[] = { m_pCommandBuffer };
         VkSubmitInfo submit_info;
         submit_info.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
@@ -206,15 +285,16 @@ namespace CAULDRON_VK
         vkResetFences(m_pDevice->GetDevice(), 1, &m_fence);
 
         // Reset so it can be reused
-        VkCommandBufferBeginInfo cmd_buf_info;
+        vkResetCommandPool(m_pDevice->GetDevice(), m_commandPool, VK_COMMAND_POOL_RESET_RELEASE_RESOURCES_BIT);
+
+        VkCommandBufferBeginInfo cmd_buf_info = {};
         cmd_buf_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-        cmd_buf_info.pNext = NULL;
-        cmd_buf_info.flags = VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT;
-        cmd_buf_info.pInheritanceInfo = NULL;
 
         res = vkBeginCommandBuffer(m_pCommandBuffer, &cmd_buf_info);
         assert(res == VK_SUCCESS);
 
         m_pDataCur = m_pDataBegin;
+
+        flushing.Dec();
     }
 }

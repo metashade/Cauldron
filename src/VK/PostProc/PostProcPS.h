@@ -1,4 +1,4 @@
-// AMD AMDUtils code
+// AMD Cauldron code
 // 
 // Copyright(c) 2018 Advanced Micro Devices, Inc.All rights reserved.
 // Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -30,31 +30,33 @@ namespace CAULDRON_VK
         void OnCreate(
             Device* pDevice,
             VkRenderPass renderPass,
-            const std::string &string,
+            const std::string &shaderFilename,
+            const std::string &shaderEntryPoint,
+            const std::string &shaderCompilerParams,
             StaticBufferPool *pStaticBufferPool,
             DynamicBufferRing *pDynamicBufferRing,
             VkDescriptorSetLayout descriptorSetLayout,
             VkPipelineColorBlendStateCreateInfo *pBlendDesc = NULL,
-            VkSampleCountFlagBits sampleDescCount = VK_SAMPLE_COUNT_1_BIT
+            VkSampleCountFlagBits sampleDescCount = VK_SAMPLE_COUNT_1_BIT,
+            bool invertedDepth = false
         );
         void OnDestroy();
         void UpdatePipeline(VkRenderPass renderPass, VkPipelineColorBlendStateCreateInfo *pBlendDesc = NULL, VkSampleCountFlagBits sampleDescCount = VK_SAMPLE_COUNT_1_BIT);
-        void Draw(VkCommandBuffer cmd_buf, VkDescriptorBufferInfo constantBuffer, VkDescriptorSet descriptorSet = NULL);
+        void Draw(VkCommandBuffer cmd_buf, VkDescriptorBufferInfo *pConstantBuffer, VkDescriptorSet descriptorSet = NULL);
 
     private:
         Device* m_pDevice;
         std::vector<VkPipelineShaderStageCreateInfo> m_shaderStages;
+        std::string m_fragmentShaderName;
 
         // all bounding boxes of all the meshes use the same geometry, shaders and pipelines.
         uint32_t m_NumIndices;
         VkIndexType m_indexType;
         VkDescriptorBufferInfo m_IBV;
-        VkDescriptorBufferInfo m_verticesView;
 
         VkPipeline m_pipeline = VK_NULL_HANDLE;
         VkRenderPass m_renderPass = VK_NULL_HANDLE;
         VkPipelineLayout m_pipelineLayout = VK_NULL_HANDLE;
-
     };
 }
 

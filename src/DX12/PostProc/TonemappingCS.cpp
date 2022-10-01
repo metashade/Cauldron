@@ -1,6 +1,6 @@
-// AMD AMDUtils code
+// AMD Cauldron code
 // 
-// Copyright(c) 2018 Advanced Micro Devices, Inc.All rights reserved.
+// Copyright(c) 2020 Advanced Micro Devices, Inc.All rights reserved.
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files(the "Software"), to deal
 // in the Software without restriction, including without limitation the rights
@@ -18,6 +18,8 @@
 // THE SOFTWARE.
 
 #include "stdafx.h"
+#include "Misc/ColorConversion.h"
+#include "Base/FreesyncHDR.h"
 #include "Base/DynamicBufferRing.h"
 #include "Base/ShaderCompiler.h"
 #include "Base/UploadHeap.h"
@@ -28,7 +30,7 @@ namespace CAULDRON_DX12
     void ToneMappingCS::OnCreate(Device* pDevice, ResourceViewHeaps *pResourceViewHeaps, DynamicBufferRing *pDynamicBufferRing)
     {
         m_pDynamicBufferRing = pDynamicBufferRing;
-        m_toneMapping.OnCreate(pDevice, pResourceViewHeaps, "TonemappingCS.hlsl", "main",1, 0, 8, 8, 1);
+        m_toneMapping.OnCreate(pDevice, pResourceViewHeaps, "TonemappingCS.hlsl", "main", 1, 0, 8, 8, 1);
     }
 
     void ToneMappingCS::OnDestroy()
@@ -36,7 +38,7 @@ namespace CAULDRON_DX12
         m_toneMapping.OnDestroy();
     }
 
-    void ToneMappingCS::Draw(ID3D12GraphicsCommandList* pCommandList, CBV_SRV_UAV *pHDRSRV, float exposure, int toneMapper,int width, int height)
+    void ToneMappingCS::Draw(ID3D12GraphicsCommandList* pCommandList, CBV_SRV_UAV *pHDRSRV, float exposure, int toneMapper, int width, int height)
     {
         UserMarker marker(pCommandList, "Tonemapping");
 
@@ -46,6 +48,18 @@ namespace CAULDRON_DX12
         pToneMapping->exposure = exposure;
         pToneMapping->toneMapper = toneMapper;
 
-        m_toneMapping.Draw(pCommandList, cbTonemappingHandle, pHDRSRV, NULL, (width + 7) / 8, (height + 7) / 8,1);
+        const LPMOutputParams lpmOutputParams = GetLPMParameters();
+
+        pToneMapping->lpmConsts.shoulder = lpmOutputParams.shoulder;
+        pToneMapping->lpmConsts.con      = lpmOutputParams.lpmConfig.con;
+        pToneMapping->lpmConsts.soft     = lpmOutputParams.lpmConfig.soft;
+        pToneMapping->lpmConsts.con2     = lpmOutputParams.lpmConfig.con2;
+        pToneMapping->lpmConsts.clip     = lpmOutputParams.lpmConfig.clip;
+        pToneMapping->lpmConsts.scaleOnly = lpmOutputParams.lpmConfig.scaleOnly;
+        pToneMapping->lpmConsts.displayMode = lpmOutputParams.displayMode;
+        pToneMapping->lpmConsts.inputToOutputMatrix = lpmOutputParams.inputToOutputMatrix;
+        memcpy(pToneMapping->lpmConsts.ctl, lpmOutputParams.ctl, sizeof(lpmOutputParams.ctl));
+
+        m_toneMapping.Draw(pCommandList, cbTonemappingHandle, pHDRSRV, NULL, (width + 7) / 8, (height + 7) / 8, 1);
     }
 }

@@ -1,6 +1,6 @@
-// AMD AMDUtils code
+// AMD Cauldron code
 // 
-// Copyright(c) 2018 Advanced Micro Devices, Inc.All rights reserved.
+// Copyright(c) 2020 Advanced Micro Devices, Inc.All rights reserved.
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files(the "Software"), to deal
 // in the Software without restriction, including without limitation the rights
@@ -21,7 +21,7 @@
 #include "Base/DynamicBufferRing.h"
 #include "Base/StaticBufferPool.h"
 #include "Base/UploadHeap.h"
-#include "Base/Freesync2.h"
+#include "Base/FreesyncHDR.h"
 #include "Misc/ColorConversion.h"
 #include "ColorConversionPS.h"
 
@@ -54,7 +54,7 @@ namespace CAULDRON_DX12
         m_ColorConversion.OnDestroy();
     }
 
-    void ColorConversionPS::UpdatePipelines(DXGI_FORMAT outFormat, DisplayModes displayMode)
+    void ColorConversionPS::UpdatePipelines(DXGI_FORMAT outFormat, DisplayMode displayMode)
     {
         m_ColorConversion.UpdatePipeline(outFormat);
 
@@ -62,30 +62,34 @@ namespace CAULDRON_DX12
 
         if (displayMode != DISPLAYMODE_SDR)
         {
-            const AGSDisplayInfo *agsDisplayInfo = fs2GetDisplayInfo();
+            const DXGI_OUTPUT_DESC1 *displayInfo = GetDisplayInfo();
 
-            m_colorConversionConsts.m_displayMinLuminancePerNits = (float)agsDisplayInfo->minLuminance / 80.0f; // RGB(1, 1, 1) maps to 80 nits in scRGB;
-            m_colorConversionConsts.m_displayMaxLuminancePerNits = (float)agsDisplayInfo->maxLuminance / 80.0f; // This means peak white equals RGB(m_maxLuminanace/80.0f, m_maxLuminanace/80.0f, m_maxLuminanace/80.0f) in scRGB;
+            m_colorConversionConsts.m_displayMinLuminancePerNits = displayInfo->MinLuminance / 80.0f; // RGB(1, 1, 1) maps to 80 nits in scRGB;
+            m_colorConversionConsts.m_displayMaxLuminancePerNits = displayInfo->MaxLuminance / 80.0f; // This means peak white equals RGB(m_maxLuminanace/80.0f, m_maxLuminanace/80.0f, m_maxLuminanace/80.0f) in scRGB;
+
+            FillDisplaySpecificPrimaries(
+                displayInfo->WhitePoint[0], displayInfo->WhitePoint[1],
+                displayInfo->RedPrimary[0], displayInfo->RedPrimary[1],
+                displayInfo->GreenPrimary[0], displayInfo->GreenPrimary[1],
+                displayInfo->BluePrimary[0], displayInfo->BluePrimary[1]
+            );
 
             SetupGamutMapperMatrices(
-                (float)agsDisplayInfo->chromaticityWhitePointX, (float)agsDisplayInfo->chromaticityWhitePointY,
-                (float)agsDisplayInfo->chromaticityRedX, (float)agsDisplayInfo->chromaticityRedY,
-                (float)agsDisplayInfo->chromaticityGreenX, (float)agsDisplayInfo->chromaticityGreenY,
-                (float)agsDisplayInfo->chromaticityBlueX, (float)agsDisplayInfo->chromaticityBlueY,
+                ColorSpace_REC709,
+                ColorSpace_Display,
                 &m_colorConversionConsts.m_contentToMonitorRecMatrix);
         }
-
     }
 
-    void ColorConversionPS::Draw(ID3D12GraphicsCommandList* pCommandList, CBV_SRV_UAV *pHDRSRV)
+    void ColorConversionPS::Draw(ID3D12GraphicsCommandList* pCommandList, CBV_SRV_UAV *pHDRSRV, uint32_t isLPMToneMapperSelected)
     {
         UserMarker marker(pCommandList, "ColorConversionPS");
 
-        D3D12_GPU_VIRTUAL_ADDRESS cbTonemappingHandle;
+        D3D12_GPU_VIRTUAL_ADDRESS cbColorConversionHandle;
         ColorConversionConsts *pColorConversionConsts;
-        m_pDynamicBufferRing->AllocConstantBuffer(sizeof(ColorConversionConsts), (void **)&pColorConversionConsts, &cbTonemappingHandle);
+        m_pDynamicBufferRing->AllocConstantBuffer(sizeof(ColorConversionConsts), (void **)&pColorConversionConsts, &cbColorConversionHandle);
         *pColorConversionConsts = m_colorConversionConsts;
-
-        m_ColorConversion.Draw(pCommandList, 1, pHDRSRV, cbTonemappingHandle);
+        pColorConversionConsts->m_isLPMToneMapperSelected = isLPMToneMapperSelected;
+        m_ColorConversion.Draw(pCommandList, 1, pHDRSRV, cbColorConversionHandle);
     }
 }

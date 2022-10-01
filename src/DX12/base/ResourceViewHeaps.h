@@ -1,6 +1,6 @@
-// AMD AMDUtils code
+// AMD Cauldron code
 // 
-// Copyright(c) 2018 Advanced Micro Devices, Inc.All rights reserved.
+// Copyright(c) 2020 Advanced Micro Devices, Inc.All rights reserved.
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files(the "Software"), to deal
 // in the Software without restriction, including without limitation the rights
@@ -19,50 +19,55 @@
 #pragma once
 
 #include "Device.h"
+#include "assert.h"
 
 namespace CAULDRON_DX12
 {
-    // In DX12 resource views are represented by handles(called also Descriptors handles). This handles live in a special type of array 
-    // called Descriptor Heap. Placing a few views in contiguously in the same Descriptor Heap allows you 
-    // to create a 'table', that is you can reference the whole table with just a offset(into the descriptor heap)
-    // and a length. This is a good practice to use tables since the harware runs more efficiently this way.
+    // In DX12 resource views are represented by handles (also called Descriptor handles). These handles live in a special type of array 
+    // called Descriptor Heap. Placing a few views contiguously in the same Descriptor Heap allows you to create a table that you can
+    // efficiently access.
     //
-    // We need then to allocate arrays of Descriptors into the descriptor heap. The following classes implement a very simple 
-    // linear allocator. Also includes some functions to create Shader/Depth-Stencil/Samples views and assign it to a certain Descriptor.
+    // We need then to allocate arrays of Descriptors into the Descriptor Heap. The following classes implement a very simple 
+    // linear allocator, and also includes some functions to create Shader/Depth-Stencil/Samples views and assign it to a certain Descriptor.
     //
-    // For every descriptor Heaps there are two types of Descriptor handles, CPU handles an GPU handles.
+    // For every Descriptor Heaps there are two types of Descriptor handles, CPU handles and GPU handles.
     // To create a view you need a:
     //      - resource 
     //      - a view description structure you need to fill
-    //      - a CPU handle (lets say the i-th one in your CPU Descritor heap)
+    //      - a CPU handle (lets say the i-th one in your CPU Descriptor Heap)
     //
-    // In order to bind that resource into the pipeline you'll need to use the i-th handle but from the GPU heap
-    // this GPU handle is used in SetGraphicsRootDescriptorTable.
-    //
+    // In order to bind that resource into the pipeline you'll need to use the i-th GPU descriptor handle and set it with
+    // SetGraphicsRootDescriptorTable()
     //
     // Since views are represented by just a pair of handles (one for the GPU another for the CPU) we can use a class for all of them.
     // Just to avoid mistaking a Sample handle by a Shader Resource, later we'll be creating different types of views.
     class ResourceView
     {
     public:
-        uint32_t GetSize()
+        uint32_t GetSize() const
         {
             return m_Size;
         }
 
-        D3D12_CPU_DESCRIPTOR_HANDLE GetCPU(uint32_t i = 0)
+        uint32_t GetDescriptorSize() const
+        {
+            return m_descriptorSize;
+        }
+
+        D3D12_CPU_DESCRIPTOR_HANDLE GetCPU(uint32_t i = 0) const
         {
             D3D12_CPU_DESCRIPTOR_HANDLE CPUDescriptor = m_CPUDescriptor;
             CPUDescriptor.ptr += i * m_descriptorSize;
             return CPUDescriptor;
         }
 
-        D3D12_GPU_DESCRIPTOR_HANDLE GetGPU(uint32_t i = 0)
+        D3D12_GPU_DESCRIPTOR_HANDLE GetGPU(uint32_t i = 0) const
         {
             D3D12_GPU_DESCRIPTOR_HANDLE GPUDescriptor = m_GPUDescriptor;
             GPUDescriptor.ptr += i * m_descriptorSize;
             return GPUDescriptor;
         }
+
     private:
         friend class StaticResourceViewHeapDX12;
         friend class DynamicResourceViewHeapDX12;
@@ -106,8 +111,12 @@ namespace CAULDRON_DX12
             D3D12_CPU_DESCRIPTOR_HANDLE CPUView = m_pHeap->GetCPUDescriptorHandleForHeapStart();
             CPUView.ptr += m_index * m_descriptorElementSize;
 
-            D3D12_GPU_DESCRIPTOR_HANDLE GPUView = m_pHeap->GetGPUDescriptorHandleForHeapStart();
-            GPUView.ptr += m_index * m_descriptorElementSize;
+            D3D12_GPU_DESCRIPTOR_HANDLE GPUView = {};
+            if (m_pHeap->GetDesc().Flags & D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE)
+            {
+                GPUView = m_pHeap->GetGPUDescriptorHandleForHeapStart();
+                GPUView.ptr += m_index * m_descriptorElementSize;
+            }
 
             m_index += size;
 

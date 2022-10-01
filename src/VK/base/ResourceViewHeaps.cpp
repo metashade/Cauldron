@@ -1,4 +1,4 @@
-// AMD AMDUtils code
+// AMD Cauldron code
 // 
 // Copyright(c) 2018 Advanced Micro Devices, Inc.All rights reserved.
 // Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -20,6 +20,7 @@
 #include "stdafx.h"
 #include "ResourceViewHeaps.h"
 #include "Misc/misc.h"
+#include "ExtDebugUtils.h"
 
 namespace CAULDRON_VK
 {
@@ -28,8 +29,9 @@ namespace CAULDRON_VK
         m_pDevice = pDevice;
         m_allocatedDescriptorCount = 0;
 
-        std::vector<VkDescriptorPoolSize> type_count =
+        const VkDescriptorPoolSize type_count[] =
         {
+            { VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, cbvDescriptorCount },
             { VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, cbvDescriptorCount },
             { VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, srvDescriptorCount },
             { VK_DESCRIPTOR_TYPE_SAMPLER, samplerDescriptorCount },
@@ -40,12 +42,14 @@ namespace CAULDRON_VK
         descriptor_pool.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
         descriptor_pool.pNext = NULL;
         descriptor_pool.flags = VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT;
-        descriptor_pool.maxSets = 6000;
-        descriptor_pool.poolSizeCount = (uint32_t)type_count.size();
-        descriptor_pool.pPoolSizes = type_count.data();
+        descriptor_pool.maxSets = 8000;
+        descriptor_pool.poolSizeCount = _countof( type_count );
+        descriptor_pool.pPoolSizes = type_count;
 
         VkResult res = vkCreateDescriptorPool(pDevice->GetDevice(), &descriptor_pool, NULL, &m_descriptorPool);
         assert(res == VK_SUCCESS);
+
+        SetResourceName(m_pDevice->GetDevice(), VK_OBJECT_TYPE_DESCRIPTOR_POOL, (uint64_t)m_descriptorPool, "ResourceViewHeap");
     }
 
     void ResourceViewHeaps::OnDestroy()
@@ -117,7 +121,22 @@ namespace CAULDRON_VK
             layoutBindings[i].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
             layoutBindings[i].descriptorCount = 1;
             layoutBindings[i].stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
-            layoutBindings[i].pImmutableSamplers = (pSamplers!=NULL)? &pSamplers[i]:NULL;
+            layoutBindings[i].pImmutableSamplers = (pSamplers != NULL) ? &pSamplers[i] : NULL;
+        }
+
+        return CreateDescriptorSetLayoutAndAllocDescriptorSet(&layoutBindings, pDescSetLayout, pDescriptorSet);
+    }
+
+    bool ResourceViewHeaps::AllocDescriptor(std::vector<uint32_t>& descriptorCounts, const VkSampler* pSamplers, VkDescriptorSetLayout* pDescSetLayout, VkDescriptorSet* pDescriptorSet)
+    {
+        std::vector<VkDescriptorSetLayoutBinding> layoutBindings(descriptorCounts.size());
+        for (int i = 0; i < descriptorCounts.size(); i++)
+        {
+            layoutBindings[i].binding = i;
+            layoutBindings[i].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+            layoutBindings[i].descriptorCount = descriptorCounts[i];
+            layoutBindings[i].stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+            layoutBindings[i].pImmutableSamplers = (pSamplers != NULL) ? &pSamplers[i] : NULL;
         }
 
         return CreateDescriptorSetLayoutAndAllocDescriptorSet(&layoutBindings, pDescSetLayout, pDescriptorSet);

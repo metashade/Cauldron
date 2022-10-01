@@ -1,6 +1,6 @@
-// AMD AMDUtils code
+// AMD Cauldron code
 // 
-// Copyright(c) 2018 Advanced Micro Devices, Inc.All rights reserved.
+// Copyright(c) 2020 Advanced Micro Devices, Inc.All rights reserved.
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files(the "Software"), to deal
 // in the Software without restriction, including without limitation the rights
@@ -28,18 +28,21 @@ namespace CAULDRON_DX12
     {
     public:
         void OnCreate(
-            Device *pDevice,
-            const std::string &shaderFilename,
-            ResourceViewHeaps *pResourceViewHeaps,
-            StaticBufferPool *pStaticBufferPool,
+            Device* pDevice,
+            const std::string& shaderFilename,
+            ResourceViewHeaps* pResourceViewHeaps,
+            StaticBufferPool* pStaticBufferPool,
             uint32_t dwSRVTableSize,
             uint32_t dwStaticSamplersCount,
-            D3D12_STATIC_SAMPLER_DESC *pStaticSamplers,
+            D3D12_STATIC_SAMPLER_DESC* pStaticSamplers,
             DXGI_FORMAT outFormat,
             uint32_t psoSampleDescCount = 1,
-            D3D12_BLEND_DESC *pBlendDesc = NULL,
-            D3D12_DEPTH_STENCIL_DESC *pDepthStencilDesc = NULL,
-            uint32_t numRenderTargets = 1
+            D3D12_BLEND_DESC* pBlendDesc = NULL,
+            D3D12_DEPTH_STENCIL_DESC* pDepthStencilDesc = NULL,
+            uint32_t numRenderTargets = 1,
+            const char* pVSTarget = "-T vs_6_0",
+            const char* pPSTarget = "-T ps_6_0",
+            bool bInvertedDepth = false
         );
         void OnDestroy();
 
@@ -49,8 +52,6 @@ namespace CAULDRON_DX12
     private:
         ResourceViewHeaps           *m_pHeaps;
         Device                      *m_pDevice;
-
-        D3D12_VERTEX_BUFFER_VIEW     m_verticesView;
 
         ResourceViewHeaps           *m_pResourceViewHeaps;
 

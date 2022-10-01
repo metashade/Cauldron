@@ -1,6 +1,6 @@
 // AMD Cauldron code
 // 
-// Copyright(c) 2018 Advanced Micro Devices, Inc.All rights reserved.
+// Copyright(c) 2020 Advanced Micro Devices, Inc.All rights reserved.
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files(the "Software"), to deal
 // in the Software without restriction, including without limitation the rights
@@ -44,7 +44,7 @@ SamplerState     samLinearWrap    :register(s0);
 //--------------------------------------------------------------------------------------
 float4 mainPS(VERTEX Input) : SV_Target
 {
-    float4 clip = float4(2 * Input.vTexcoord.x - 1, 1 - 2 * Input.vTexcoord.y, 1, 1);
+    float4 clip = float4(2 * Input.vTexcoord.x - 1, 1 - 2 * Input.vTexcoord.y, FAR_DEPTH, 1);
 
     float4 pixelDir = mul(u_mClipToWord, clip);
 

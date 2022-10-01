@@ -1,4 +1,4 @@
-// AMD AMDUtils code
+// AMD Cauldron code
 // 
 // Copyright(c) 2018 Advanced Micro Devices, Inc.All rights reserved.
 // Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -20,7 +20,7 @@
 #include "stdafx.h"
 #include "Base/DynamicBufferRing.h"
 #include "Base/StaticBufferPool.h"
-#include "Base/ExtDebugMarkers.h"
+#include "Base/ExtDebugUtils.h"
 #include "Base/UploadHeap.h"
 #include "Base/Texture.h"
 #include "Base/Imgui.h"
@@ -95,7 +95,7 @@ namespace CAULDRON_VK
 
         // Use helper class to create the fullscreen pass
         //
-        m_downscale.OnCreate(pDevice, m_in, "DownSamplePS.glsl", pStaticBufferPool, pConstantBufferRing, m_descriptorSetLayout);
+        m_downscale.OnCreate(pDevice, m_in, "DownSamplePS.glsl", "main", "", pStaticBufferPool, pConstantBufferRing, m_descriptorSetLayout);
 
         // Allocate descriptors for the mip chain
         //
@@ -169,6 +169,11 @@ namespace CAULDRON_VK
                 fb_info.layers = 1;
                 VkResult res = vkCreateFramebuffer(m_pDevice->GetDevice(), &fb_info, NULL, &m_mip[i].frameBuffer);
                 assert(res == VK_SUCCESS);
+
+                std::string ResourceName = "DownsamplePS";
+                ResourceName += std::to_string(i);
+
+                SetResourceName(m_pDevice->GetDevice(), VK_OBJECT_TYPE_FRAMEBUFFER, (uint64_t)m_mip[i].frameBuffer, ResourceName.c_str());
             }
         }
     }
@@ -177,9 +182,13 @@ namespace CAULDRON_VK
     {
         for (int i = 0; i < m_mipCount; i++)
         {
-            vkDestroyImageView(m_pDevice->GetDevice(), m_mip[i].m_SRV, NULL);
-            vkDestroyImageView(m_pDevice->GetDevice(), m_mip[i].RTV, NULL);
-            vkDestroyFramebuffer(m_pDevice->GetDevice(), m_mip[i].frameBuffer, NULL);
+            if (m_mip[i].m_SRV != nullptr)
+            {
+                vkDestroyImageView(m_pDevice->GetDevice(), m_mip[i].m_SRV, NULL);
+                vkDestroyImageView(m_pDevice->GetDevice(), m_mip[i].RTV, NULL);
+                vkDestroyFramebuffer(m_pDevice->GetDevice(), m_mip[i].frameBuffer, NULL);
+                m_mip[i].m_SRV = {};
+            }
         }
 
         m_result.OnDestroy();
@@ -207,7 +216,6 @@ namespace CAULDRON_VK
         //
         for (int i = 0; i < m_mipCount; i++)
         {
-
             VkRenderPassBeginInfo rp_begin = {};
             rp_begin.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
             rp_begin.pNext = NULL;
@@ -229,7 +237,7 @@ namespace CAULDRON_VK
             data->invHeight = 1.0f / (float)(m_Height >> i);
             data->mipLevel = i;
 
-            m_downscale.Draw(cmd_buf, constantBuffer, m_mip[i].descriptorSet);
+            m_downscale.Draw(cmd_buf, &constantBuffer, m_mip[i].descriptorSet);
 
             vkCmdEndRenderPass(cmd_buf);
         }

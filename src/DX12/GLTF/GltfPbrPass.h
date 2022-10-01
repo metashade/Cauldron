@@ -1,6 +1,6 @@
-// AMD AMDUtils code
+// AMD Cauldron code
 // 
-// Copyright(c) 2018 Advanced Micro Devices, Inc.All rights reserved.
+// Copyright(c) 2020 Advanced Micro Devices, Inc.All rights reserved.
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files(the "Software"), to deal
 // in the Software without restriction, including without limitation the rights
@@ -21,6 +21,7 @@
 #include "GLTFTexturesAndBuffers.h"
 #include "PostProc/SkyDome.h"
 #include "../Common/GLTF/GltfPbrMaterial.h"
+#include "base/GBuffer.h"
 
 namespace CAULDRON_DX12
 {
@@ -42,8 +43,9 @@ namespace CAULDRON_DX12
 
         ID3D12RootSignature	*m_RootSignature;
         ID3D12PipelineState	*m_PipelineRender;
+        ID3D12PipelineState *m_PipelineWireframeRender;
 
-        void DrawPrimitive(ID3D12GraphicsCommandList *pCommandList, CBV_SRV_UAV *pShadowBufferSRV, D3D12_GPU_VIRTUAL_ADDRESS perSceneDesc, D3D12_GPU_VIRTUAL_ADDRESS perObjectDesc, D3D12_GPU_VIRTUAL_ADDRESS pPerSkeleton);
+        void DrawPrimitive(ID3D12GraphicsCommandList *pCommandList, CBV_SRV_UAV *pShadowBufferSRV, D3D12_GPU_VIRTUAL_ADDRESS perSceneDesc, D3D12_GPU_VIRTUAL_ADDRESS perObjectDesc, D3D12_GPU_VIRTUAL_ADDRESS pPerSkeleton, bool bWireframe);
     };
 
     struct PBRMesh
@@ -58,50 +60,69 @@ namespace CAULDRON_DX12
 
         struct per_object
         {
-            XMMATRIX mWorld;
+            math::Matrix4 mCurrentWorld;
+            math::Matrix4 mPreviousWorld;
 
             PBRMaterialParametersConstantBuffer m_pbrParams;
         };
 
+        struct BatchList
+        {
+            float m_depth;
+            PBRPrimitives *m_pPrimitive;
+            D3D12_GPU_VIRTUAL_ADDRESS m_perFrameDesc;
+            D3D12_GPU_VIRTUAL_ADDRESS m_perObjectDesc;
+            D3D12_GPU_VIRTUAL_ADDRESS m_pPerSkeleton;
+            operator float() { return -m_depth; }
+        };
+
         void OnCreate(
-            Device *pDevice,
-            UploadHeap *pUploadHeap,
-            ResourceViewHeaps *pHeaps,
-            DynamicBufferRing *pDynamicBufferRing,
-            StaticBufferPool *pStaticBufferPool,
-            GLTFTexturesAndBuffers *pGLTFTexturesAndBuffers,
-            SkyDome *pSkyDome,
+            Device* pDevice,
+            UploadHeap* pUploadHeap,
+            ResourceViewHeaps* pHeaps,
+            DynamicBufferRing* pDynamicBufferRing,
+            GLTFTexturesAndBuffers* pGLTFTexturesAndBuffers,
+            SkyDome* pSkyDome,
+            bool bUseSSAOMask,
             bool bUseShadowMask,
-            DXGI_FORMAT outFormat,
-            uint32_t sampleDescCount);
+            GBufferRenderPass* pGBufferRenderPass,
+            AsyncPool* pAsyncPool = NULL,
+            bool bInvertedDepth = false);
 
         void OnDestroy();
-        void Draw(ID3D12GraphicsCommandList *pCommandList, CBV_SRV_UAV *pShadowBufferSRV);
-    
-    protected:
-        GLTFTexturesAndBuffers *m_pGLTFTexturesAndBuffers;
+        void OnUpdateWindowSizeDependentResources(Texture *pSSAO);
+        void BuildBatchLists(std::vector<BatchList> *pSolid, std::vector<BatchList> *pTransparent, bool bWireframe = false);
+        void DrawBatchList(ID3D12GraphicsCommandList *pCommandList, CBV_SRV_UAV *pShadowBufferSRV, std::vector<BatchList> *pBatchList, bool bWireframe = false);
+    private:
+        Device                  *m_pDevice;
+        GBufferRenderPass       *m_pGBufferRenderPass;
 
-        ResourceViewHeaps *m_pResourceViewHeaps;
-        DynamicBufferRing *m_pDynamicBufferRing;
-        StaticBufferPool *m_pStaticBufferPool;
+        GLTFTexturesAndBuffers  *m_pGLTFTexturesAndBuffers;
 
-        std::vector<PBRMesh> m_meshes;
+        ResourceViewHeaps       *m_pResourceViewHeaps;
+        DynamicBufferRing       *m_pDynamicBufferRing;
+
+        std::vector<PBRMesh>     m_meshes;
         std::vector<PBRMaterial> m_materialsData;
 
-        GltfPbrPass::per_frame m_cbPerFrame;
+        GltfPbrPass::per_frame   m_cbPerFrame;
 
-        PBRMaterial m_defaultMaterial;
+        PBRMaterial              m_defaultMaterial;
 
-        Texture m_BrdfLut;
+        Texture                  m_BrdfLut;
 
-        DXGI_FORMAT m_outFormat;
-        uint32_t m_sampleCount;
+        bool                     m_doLighting;
 
-        void CreateGPUMaterialData(PBRMaterial *tfmat, std::map<std::string, Texture *> &texturesBase, SkyDome *pSkyDome);
-        void CreateDescriptors(ID3D12Device* pDevice, bool bUsingSkinning, DefineList *pAttributeDefines, PBRPrimitives *pPrimitive);
+        DXGI_FORMAT              m_depthFormat;
+        std::vector<DXGI_FORMAT> m_outFormats;
+        uint32_t                 m_sampleCount;
+
+        bool                     m_bInvertedDepth;
+
+        void CreateDescriptorTableForMaterialTextures(PBRMaterial *tfmat, std::map<std::string, Texture *> &texturesBase, SkyDome *pSkyDome, bool bUseShadowMask, bool bUseSSAOMask);
+        void CreateRootSignature(bool bUsingSkinning, DefineList &defines, PBRPrimitives *pPrimitive, bool bUseSSAOMask);
         
         virtual void CreatePipeline(
-            ID3D12Device*,
             std::vector<std::string> semanticName,
             std::vector<D3D12_INPUT_ELEMENT_DESC> layout,
             DefineList *pAttributeDefines,

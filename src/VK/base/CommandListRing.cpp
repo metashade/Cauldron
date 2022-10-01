@@ -1,4 +1,4 @@
-// AMD AMDUtils code
+// AMD Cauldron code
 // 
 // Copyright(c) 2018 Advanced Micro Devices, Inc.All rights reserved.
 // Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -20,6 +20,8 @@
 #include "stdafx.h"
 #include "Device.h"
 #include "CommandListRing.h"
+#include "ExtDebugUtils.h"
+#include "Misc/Misc.h"
 
 namespace CAULDRON_VK
 {
@@ -55,7 +57,7 @@ namespace CAULDRON_VK
             {
                 cmd_pool_info.queueFamilyIndex = pDevice->GetComputeQueueFamilyIndex();
             }
-            cmd_pool_info.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT | VK_COMMAND_POOL_CREATE_TRANSIENT_BIT;
+            cmd_pool_info.flags = VK_COMMAND_POOL_CREATE_TRANSIENT_BIT;
             VkResult res = vkCreateCommandPool(pDevice->GetDevice(), &cmd_pool_info, NULL, &pCBPF->m_commandPool);
             assert(res == VK_SUCCESS);
 
@@ -92,7 +94,7 @@ namespace CAULDRON_VK
         for (uint32_t a = 0; a < m_numberOfAllocators; a++)
         {
             vkFreeCommandBuffers(m_pDevice->GetDevice(), m_pCommandBuffers[a].m_commandPool, m_commandListsPerBackBuffer, m_pCommandBuffers[a].m_pCommandBuffer);
-
+            delete[] m_pCommandBuffers[a].m_pCommandBuffer;
             vkDestroyCommandPool(m_pDevice->GetDevice(), m_pCommandBuffers[a].m_commandPool, NULL);
         }
 
@@ -121,6 +123,31 @@ namespace CAULDRON_VK
     void CommandListRing::OnBeginFrame()
     {
         m_pCurrentFrame = &m_pCommandBuffers[m_frameIndex % m_numberOfAllocators];
+
+        // Wait for any work that is not finished for current frame
+
+        // NOTE: That code seems to not be working properly.
+        // DEFENSIVE HACK: Since we are moving to Cauldron2 we are adding a hack to fix samples by waiting on the device to be idle
+#if 0
+        if(m_pCurrentFrame->m_cmdBufExecutedFences)
+        {
+            vkWaitForFences(m_pDevice->GetDevice(), 1, &m_pCurrentFrame->m_cmdBufExecutedFences, false, UINT64_MAX);
+            vkResetFences(m_pDevice->GetDevice(), 1, &m_pCurrentFrame->m_cmdBufExecutedFences);
+        }
+        else
+        {
+            VkFenceCreateInfo fence_ci = {};
+            fence_ci.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
+            fence_ci.flags = VK_FENCE_CREATE_SIGNALED_BIT;
+
+            auto res = vkCreateFence(m_pDevice->GetDevice(), &fence_ci, NULL, &m_pCurrentFrame->m_cmdBufExecutedFences);
+        }
+#else
+        vkDeviceWaitIdle(m_pDevice->GetDevice());
+#endif
+        // NOTE: vkResetCommandPool - resets entire pool causes following:
+        // Validation Error: [ VUID-vkResetCommandBuffer-commandBuffer-00045 ] Object 0: handle = 0x29ac6454070, type = VK_OBJECT_TYPE_COMMAND_BUFFER; | MessageID = 0x1e7883ea | Attempt to reset VkCommandBuffer 0x29ac6454070[] which is in use. The Vulkan spec states: commandBuffer must not be in the pending state (https://vulkan.lunarg.com/doc/view/1.3.204.1/windows/1.3-extensions/vkspec.html#VUID-vkResetCommandBuffer-commandBuffer-00045)
+        vkResetCommandPool(m_pDevice->GetDevice(), m_pCurrentFrame->m_commandPool, VK_COMMAND_POOL_RESET_RELEASE_RESOURCES_BIT);
 
         m_pCurrentFrame->m_UsedCls = 0;
 

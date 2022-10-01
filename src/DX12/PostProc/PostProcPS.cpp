@@ -1,6 +1,6 @@
-// AMD AMDUtils code
+// AMD Cauldron code
 // 
-// Copyright(c) 2018 Advanced Micro Devices, Inc.All rights reserved.
+// Copyright(c) 2020 Advanced Micro Devices, Inc.All rights reserved.
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files(the "Software"), to deal
 // in the Software without restriction, including without limitation the rights
@@ -40,45 +40,39 @@ namespace CAULDRON_DX12
         uint32_t psoSampleDescCount,
         D3D12_BLEND_DESC *pBlendDesc,
         D3D12_DEPTH_STENCIL_DESC *pDepthStencilDesc,
-        uint32_t numRenderTargets
+        uint32_t numRenderTargets,
+        const char *pVSTarget,
+        const char *pPSTarget,
+        bool bInvertedDepth
     )
     {
         m_pDevice = pDevice;
         m_pResourceViewHeaps = pResourceViewHeaps;
 
-        float vertices[] = {
-            -1,  1,  1,   0, 0,
-             3,  1,  1,   2, 0,
-            -1, -3,  1,   0, 2,
-        };
-        pStaticBufferPool->AllocVertexBuffer(3, 5 * sizeof(float), vertices, &m_verticesView);
-
         // Create the vertex shader
         static const char* vertexShader =
-            "struct VERTEX_IN\
-                {\
-                    float3 vPosition : POSITION;\
-                    float2 vTexture  : TEXCOORD;\
-                };\
-                struct VERTEX_OUT\
-                {\
-                    float2 vTexture : TEXCOORD;\
-                    float4 vPosition : SV_POSITION;\
-                };\
-                VERTEX_OUT mainVS(VERTEX_IN Input)\
-                {\
-                    VERTEX_OUT Output;\
-                    Output.vPosition = float4(Input.vPosition, 1.0f);\
-                    Output.vTexture = Input.vTexture;\
-                    return Output;\
-                }";
+           "static const float4 FullScreenVertsPos[3] = { float4(-1, 1, FAR_DEPTH, 1), float4(3, 1, FAR_DEPTH, 1), float4(-1, -3, FAR_DEPTH, 1) };\
+            static const float2 FullScreenVertsUVs[3] = { float2(0, 0), float2(2, 0), float2(0, 2) };\
+            struct VERTEX_OUT\
+            {\
+                float2 vTexture : TEXCOORD;\
+                float4 vPosition : SV_POSITION;\
+            };\
+            VERTEX_OUT mainVS(uint vertexId : SV_VertexID)\
+            {\
+                VERTEX_OUT Output;\
+                Output.vPosition = FullScreenVertsPos[vertexId];\
+                Output.vTexture = FullScreenVertsUVs[vertexId];\
+                return Output;\
+            }";
 
         // Compile shaders
         //
         {
             DefineList defines;
-            CompileShaderFromString(vertexShader, &defines, "mainVS", "vs_5_0", 0, 0, &m_shaderVert);
-            CompileShaderFromFile(shaderFilename.c_str(), &defines, "mainPS", "ps_5_0", 0, &m_shaderPixel);
+            defines["FAR_DEPTH"] = bInvertedDepth ? "0" : "1";
+            CompileShaderFromString(vertexShader, &defines, "mainVS", pVSTarget, &m_shaderVert);
+            CompileShaderFromFile(shaderFilename.c_str(), &defines, "mainPS", pPSTarget, &m_shaderPixel);
         }
 
         // Create root signature
@@ -136,18 +130,12 @@ namespace CAULDRON_DX12
 
         //we need to cache the refrenced data so the lambda function can get a copy
         D3D12_BLEND_DESC blendDesc = pBlendDesc ? *pBlendDesc : CD3DX12_BLEND_DESC(D3D12_DEFAULT);
-        D3D12_DEPTH_STENCIL_DESC depthStencilBlankDesc = {};
+        D3D12_DEPTH_STENCIL_DESC depthStencilBlankDesc = CD3DX12_DEPTH_STENCIL_DESC(D3D12_DEFAULT);
+        depthStencilBlankDesc.DepthEnable = FALSE;
         D3D12_DEPTH_STENCIL_DESC depthStencilDesc = pDepthStencilDesc ? *pDepthStencilDesc : depthStencilBlankDesc;
 
-        // layout
-        D3D12_INPUT_ELEMENT_DESC layout[] =
-        {
-            { "POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0,  0, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
-            { "TEXCOORD", 0, DXGI_FORMAT_R32G32_FLOAT   , 0, 12, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 }
-        };
-
         D3D12_GRAPHICS_PIPELINE_STATE_DESC descPso = {};
-        descPso.InputLayout = { layout, 2 };
+        descPso.InputLayout = { nullptr, 0 };
         descPso.pRootSignature = m_pRootSignature;
         descPso.VS = m_shaderVert;
         descPso.PS = m_shaderPixel;
@@ -195,7 +183,6 @@ namespace CAULDRON_DX12
         // Bind vertices 
         //
         pCommandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
-        pCommandList->IASetVertexBuffers(0, 1, &m_verticesView);
 
         // Bind Descriptor heaps, root signatures and descriptor sets
         //                

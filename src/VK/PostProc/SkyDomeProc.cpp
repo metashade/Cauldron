@@ -1,4 +1,4 @@
-// AMD AMDUtils code
+// AMD Cauldron code
 // 
 // Copyright(c) 2018 Advanced Micro Devices, Inc.All rights reserved.
 // Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -20,18 +20,19 @@
 #include "stdafx.h"
 #include "Base/DynamicBufferRing.h"
 #include "Base/StaticBufferPool.h"
-#include "Base/ExtDebugMarkers.h"
+#include "Base/ExtDebugUtils.h"
 #include "Base/UploadHeap.h"
 #include "Base/Texture.h"
 #include "SkyDomeProc.h"
 
 namespace CAULDRON_VK
 {
-    void SkyDomeProc::OnCreate(Device* pDevice, VkRenderPass renderPass, UploadHeap* pUploadHeap, VkFormat outFormat, ResourceViewHeaps *pResourceViewHeaps, DynamicBufferRing *pDynamicBufferRing, StaticBufferPool  *pStaticBufferPool, VkSampleCountFlagBits sampleDescCount)
+    void SkyDomeProc::OnCreate(Device* pDevice, VkRenderPass renderPass, UploadHeap* pUploadHeap, VkFormat outFormat, ResourceViewHeaps *pResourceViewHeaps, DynamicBufferRing *pDynamicBufferRing, StaticBufferPool  *pStaticBufferPool, VkSampleCountFlagBits sampleDescCount, bool invertedDepth)
     {
         m_pDevice = pDevice;
         m_pDynamicBufferRing = pDynamicBufferRing;
         m_pResourceViewHeaps = pResourceViewHeaps;
+        m_bInvertedDepth = invertedDepth;
 
         // Create Descriptor Set Layout, all we need is a uniform dynamic buffer to pass some parameters to the shader. All is procedural and we need no textures.
         //
@@ -45,7 +46,7 @@ namespace CAULDRON_VK
         m_pResourceViewHeaps->CreateDescriptorSetLayoutAndAllocDescriptorSet(&layoutBindings, &m_descriptorLayout, &m_descriptorSet);
         pDynamicBufferRing->SetDescriptorSet(0, sizeof(SkyDomeProc::Constants), m_descriptorSet);
 
-        m_skydome.OnCreate(pDevice, renderPass, "SkyDomeProc.hlsl", pStaticBufferPool, pDynamicBufferRing, m_descriptorLayout, NULL, sampleDescCount);
+        m_skydome.OnCreate(pDevice, renderPass, "SkyDomeProc.glsl", "main", "", pStaticBufferPool, pDynamicBufferRing, m_descriptorLayout, NULL, sampleDescCount, m_bInvertedDepth);
     }
 
     void SkyDomeProc::OnDestroy()
@@ -66,32 +67,8 @@ namespace CAULDRON_VK
         m_pDynamicBufferRing->AllocConstantBuffer(sizeof(SkyDomeProc::Constants), (void **)&cbPerDraw, &constantBuffer);
         *cbPerDraw = constants;
 
-        m_skydome.Draw(cmd_buf, constantBuffer, m_descriptorSet);
+        m_skydome.Draw(cmd_buf, &constantBuffer, m_descriptorSet);
 
         SetPerfMarkerEnd(cmd_buf);
-    }
-
-    //
-    // TODO: These functions below should generate a diffuse and specular cubemap to be used in IBL
-    //
-
-    void SkyDomeProc::GenerateDiffuseMapFromEnvironmentMap()
-    {
-
-    }
-
-    void SkyDomeProc::CreateDiffCubeSRV(uint32_t index, VkDescriptorSet descriptorSet)
-    {
-        //SetDescriptor(m_pDevice->GetDevice(), index, m_CubeDiffuseTextureView, m_samplerDiffuseCube, descriptorSet);
-    }
-
-    void SkyDomeProc::CreateSpecCubeSRV(uint32_t index, VkDescriptorSet descriptorSet)
-    {
-        //SetDescriptor(m_pDevice->GetDevice(), index, m_CubeSpecularTextureView, m_samplerDiffuseCube, descriptorSet);
-    }
-
-    void SkyDomeProc::CreateBrdfSRV(uint32_t index, VkDescriptorSet descriptorSet)
-    {
-        //SetDescriptor(m_pDevice->GetDevice(), index, m_BrdfTextureView, m_samplerBDRF, descriptorSet);
     }
 }

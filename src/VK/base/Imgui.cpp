@@ -1,4 +1,4 @@
-// AMD AMDUtils code
+// AMD Cauldron code
 // 
 // Copyright(c) 2018 Advanced Micro Devices, Inc.All rights reserved.
 // Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -19,8 +19,11 @@
 
 #include "stdafx.h"
 #include "ShaderCompilerHelper.h"
-#include "Base/ExtDebugMarkers.h"
+#include "Base/ExtDebugUtils.h"
 #include "Imgui.h"
+
+// For windows DPI scaling fetching
+#include <shellscalingapi.h>
 
 namespace CAULDRON_VK
 {
@@ -37,7 +40,7 @@ namespace CAULDRON_VK
     // OnCreate
     //
     //--------------------------------------------------------------------------------------
-    void ImGUI::OnCreate(Device* pDevice, VkRenderPass renderPass, UploadHeap *pUploadHeap, DynamicBufferRing *pConstantBufferRing)
+    void ImGUI::OnCreate(Device* pDevice, VkRenderPass renderPass, UploadHeap *pUploadHeap, DynamicBufferRing *pConstantBufferRing, float fontSize/*= 13.f*/)
     {
         m_pConstBuf = pConstantBufferRing;
         m_pDevice = pDevice;
@@ -48,6 +51,14 @@ namespace CAULDRON_VK
         // Get UI texture 
         //
         ImGuiIO& io = ImGui::GetIO();
+
+        // Fixup font size based on scale factor
+        DEVICE_SCALE_FACTOR scaleFactor = GetScaleFactorForDevice(DEVICE_PRIMARY);
+        float textScale = scaleFactor / 100.f;
+        ImFontConfig font_cfg;
+        font_cfg.SizePixels = fontSize * textScale;
+        io.Fonts->AddFontDefault(&font_cfg);
+
         unsigned char* pixels;
         int width, height;
         io.Fonts->GetTexDataAsRGBA32(&pixels, &width, &height);
@@ -70,27 +81,16 @@ namespace CAULDRON_VK
             info.usage = VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
             info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
             info.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-            res = vkCreateImage(pDevice->GetDevice(), &info, NULL, &m_pTexture2D);
+
+            VmaAllocationCreateInfo imageAllocCreateInfo = {};
+            imageAllocCreateInfo.usage = VMA_MEMORY_USAGE_GPU_ONLY;
+            imageAllocCreateInfo.flags = VMA_ALLOCATION_CREATE_USER_DATA_COPY_STRING_BIT;
+            imageAllocCreateInfo.pUserData = "ImGUI tex";
+            VmaAllocationInfo gpuImageAllocInfo = {};
+            VkResult res = vmaCreateImage(m_pDevice->GetAllocator(), &info, &imageAllocCreateInfo, &m_pTexture2D, &m_ImageAlloc, &gpuImageAllocInfo);
             assert(res == VK_SUCCESS);
+            SetResourceName(pDevice->GetDevice(), VK_OBJECT_TYPE_IMAGE, (uint64_t)m_pTexture2D, (const char*)imageAllocCreateInfo.pUserData);
 
-            VkMemoryRequirements mem_reqs;
-            vkGetImageMemoryRequirements(pDevice->GetDevice(), m_pTexture2D, &mem_reqs);
-
-            VkMemoryAllocateInfo alloc_info = {};
-            alloc_info.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-            alloc_info.allocationSize = mem_reqs.size;
-            alloc_info.memoryTypeIndex = 0;
-
-            bool pass = memory_type_from_properties(m_pDevice->GetPhysicalDeviceMemoryProperties(), mem_reqs.memoryTypeBits,
-                VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-                &alloc_info.memoryTypeIndex);
-            assert(pass && "No mappable, coherent memory");
-
-            res = vkAllocateMemory(pDevice->GetDevice(), &alloc_info, NULL, &m_deviceMemory);
-            assert(res == VK_SUCCESS);
-
-            res = vkBindImageMemory(pDevice->GetDevice(), m_pTexture2D, m_deviceMemory, 0);
-            assert(res == VK_SUCCESS);
         }
 
         // Create the Image View
@@ -106,6 +106,8 @@ namespace CAULDRON_VK
             info.subresourceRange.layerCount = 1;
             res = vkCreateImageView(pDevice->GetDevice(), &info, NULL, &m_pTextureSRV);
             assert(res == VK_SUCCESS);
+
+            SetResourceName(m_pDevice->GetDevice(), VK_OBJECT_TYPE_IMAGE_VIEW, (uint64_t)m_pTextureSRV, "ImGUI tex");
         }
 
         // Tell ImGUI what the image view is
@@ -166,9 +168,9 @@ namespace CAULDRON_VK
         {
             VkSamplerCreateInfo info = {};
             info.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
-            info.magFilter = VK_FILTER_LINEAR;
-            info.minFilter = VK_FILTER_LINEAR;
-            info.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
+            info.magFilter = VK_FILTER_NEAREST;
+            info.minFilter = VK_FILTER_NEAREST;
+            info.mipmapMode = VK_SAMPLER_MIPMAP_MODE_NEAREST;
             info.addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT;
             info.addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT;
             info.addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT;
@@ -202,7 +204,7 @@ namespace CAULDRON_VK
 
         // Pixel shader
         //
-        const char *fragShaderTextGLSL =
+        const char* fragShaderTextGLSL =
             "#version 400\n"
             "#extension GL_ARB_separate_shader_objects : enable\n"
             "#extension GL_ARB_shading_language_420pack : enable\n"
@@ -217,6 +219,8 @@ namespace CAULDRON_VK
             "void main() {\n"
             "#if 1\n"
             "   outColor = inColor * texture(sampler2D(sTexture, sSampler), inTexCoord.st);\n"
+            "   const float gamma = 2.2f;\n"
+            "   outColor.xyz = pow(outColor.xyz, vec3(gamma, gamma, gamma));\n"
             "#else\n"
             "   outColor = inColor;\n"
             "#endif\n"
@@ -233,7 +237,10 @@ namespace CAULDRON_VK
             ": SV_Target\n"
             "{\n"
             "#if 1\n"
-            "   return col * texture0.Sample(sampler0, uv.xy); \n"
+            "   float4 color = col * texture0.Sample(sampler0, uv.xy); \n"
+            "   const float gamma = 2.2f;\n"
+            "   color.xyz = pow(color.xyz, float3(gamma, gamma, gamma);\n"
+            "   return color;\n"
             "#else\n"
             "   return col;\n"
             "#endif\n"
@@ -244,16 +251,16 @@ namespace CAULDRON_VK
         DefineList defines;
         VkPipelineShaderStageCreateInfo m_vertexShader, m_fragmentShader;
 
-        res = VKCompileFromString(pDevice->GetDevice(), SST_GLSL, VK_SHADER_STAGE_VERTEX_BIT, vertShaderTextGLSL, "main", &defines, &m_vertexShader);
+        res = VKCompileFromString(pDevice->GetDevice(), SST_GLSL, VK_SHADER_STAGE_VERTEX_BIT, vertShaderTextGLSL, "main", "", &defines, &m_vertexShader);
         assert(res == VK_SUCCESS);
 
 #define USE_GLSL 1
 #ifdef USE_GLSL 
-        res = VKCompileFromString(pDevice->GetDevice(), SST_GLSL, VK_SHADER_STAGE_FRAGMENT_BIT, fragShaderTextGLSL, "main", &defines, &m_fragmentShader);
+        res = VKCompileFromString(pDevice->GetDevice(), SST_GLSL, VK_SHADER_STAGE_FRAGMENT_BIT, fragShaderTextGLSL, "main", "", &defines, &m_fragmentShader);
         assert(res == VK_SUCCESS);
 #else
 
-        res = VKCompileFromString(pDevice->GetDevice(), SST_HLSL, VK_SHADER_STAGE_FRAGMENT_BIT, fragShaderTextHLSL, "main", &defines, &m_fragmentShader);
+        res = VKCompileFromString(pDevice->GetDevice(), SST_HLSL, VK_SHADER_STAGE_FRAGMENT_BIT, fragShaderTextHLSL, "main", "", &defines, &m_fragmentShader);
         assert(res == VK_SUCCESS);
 #endif
         m_shaderStages.clear();
@@ -289,7 +296,6 @@ namespace CAULDRON_VK
         descriptor_layout.bindingCount = 3;
         descriptor_layout.pBindings = layout_bindings;
 
-
         res = vkCreateDescriptorSetLayout(pDevice->GetDevice(), &descriptor_layout, NULL, &m_desc_layout);
         assert(res == VK_SUCCESS);
 
@@ -304,6 +310,7 @@ namespace CAULDRON_VK
 
         res = vkCreatePipelineLayout(pDevice->GetDevice(), &pPipelineLayoutCreateInfo, NULL, &m_pipelineLayout);
         assert(res == VK_SUCCESS);
+        SetResourceName(pDevice->GetDevice(), VK_OBJECT_TYPE_PIPELINE_LAYOUT, (uint64_t)m_pipelineLayout, "ImGUI PL");
 
         // Create descriptor pool, allocate and update the descriptors
         std::vector<VkDescriptorPoolSize> type_count = { { VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, 128 },{ VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, 128 }, { VK_DESCRIPTOR_TYPE_SAMPLER, 128 } };
@@ -539,6 +546,7 @@ namespace CAULDRON_VK
 
         VkResult res = vkCreateGraphicsPipelines(m_pDevice->GetDevice(), m_pDevice->GetPipelineCache(), 1, &pipeline, NULL, &m_pipeline);
         assert(res == VK_SUCCESS);
+        SetResourceName(m_pDevice->GetDevice(), VK_OBJECT_TYPE_PIPELINE, (uint64_t)m_pipeline, "ImGUI P");
     }
 
     //--------------------------------------------------------------------------------------
@@ -553,10 +561,6 @@ namespace CAULDRON_VK
 
         vkDestroyImageView(m_pDevice->GetDevice(), m_pTextureSRV, NULL);
 
-        // Our heaps dot allow freeing descriptosets, also this incurrs in driver overhead
-        //
-        //vkFreeDescriptorSets(m_pDevice->GetDevice(), m_descriptorPool, 1, &m_descriptorSet);
-
         vkDestroyDescriptorSetLayout(m_pDevice->GetDevice(), m_desc_layout, nullptr);
         m_desc_layout = VK_NULL_HANDLE;
 
@@ -566,17 +570,17 @@ namespace CAULDRON_VK
         vkDestroyDescriptorPool(m_pDevice->GetDevice(), m_descriptorPool, NULL);
         m_descriptorPool = VK_NULL_HANDLE;
 
-        vkFreeMemory(m_pDevice->GetDevice(), m_deviceMemory, NULL);
-        m_deviceMemory = VK_NULL_HANDLE;
+        if (m_pTexture2D != VK_NULL_HANDLE)
+        {
+            vmaDestroyImage(m_pDevice->GetAllocator(), m_pTexture2D, m_ImageAlloc);
+            m_pTexture2D = VK_NULL_HANDLE;
+        }
 
         vkDestroyPipelineLayout(m_pDevice->GetDevice(), m_pipelineLayout, NULL);
         m_pipelineLayout = VK_NULL_HANDLE;
 
         vkDestroySampler(m_pDevice->GetDevice(), m_sampler, NULL);
         m_sampler = VK_NULL_HANDLE;
-
-        vkDestroyImage(m_pDevice->GetDevice(), m_pTexture2D, NULL);
-        m_pTexture2D = VK_NULL_HANDLE;
     }
 
     //--------------------------------------------------------------------------------------
@@ -721,7 +725,7 @@ namespace CAULDRON_VK
             }
             vtx_offset += cmd_list->VtxBuffer.Size;
         }
-        
+
         SetPerfMarkerEnd(cmd_buf);
     }
 }

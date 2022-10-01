@@ -1,4 +1,4 @@
-// AMD AMDUtils code
+// AMD Cauldron code
 // 
 // Copyright(c) 2018 Advanced Micro Devices, Inc.All rights reserved.
 // Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -18,8 +18,9 @@
 // THE SOFTWARE.
 
 #include "stdafx.h"
-#include "StaticBufferPool.h"
 #include "Misc/Misc.h"
+#include "StaticBufferPool.h"
+#include "ExtDebugUtils.h"
 
 namespace CAULDRON_VK
 {
@@ -41,12 +42,14 @@ namespace CAULDRON_VK
             bufferInfo.usage |= VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
 
         VmaAllocationCreateInfo allocInfo = {};
-        allocInfo.usage = VMA_MEMORY_USAGE_CPU_TO_GPU;
+        allocInfo.usage = m_bUseVidMem ? VMA_MEMORY_USAGE_CPU_ONLY : VMA_MEMORY_USAGE_CPU_TO_GPU; // For the upload buffer, use system memory.
         allocInfo.flags = VMA_ALLOCATION_CREATE_USER_DATA_COPY_STRING_BIT;
         allocInfo.pUserData = (void*)name;
 
         res = vmaCreateBuffer(pDevice->GetAllocator(), &bufferInfo, &allocInfo, &m_buffer, &m_bufferAlloc, nullptr);
         assert(res == VK_SUCCESS);
+        SetResourceName(pDevice->GetDevice(), VK_OBJECT_TYPE_BUFFER, (uint64_t)m_buffer, "StaticBufferPool (sys mem)");
+
         res = vmaMapMemory(pDevice->GetAllocator(), m_bufferAlloc, (void **)&m_pData);
         assert(res == VK_SUCCESS);
 #else
@@ -108,7 +111,9 @@ namespace CAULDRON_VK
             allocInfo.flags = VMA_ALLOCATION_CREATE_USER_DATA_COPY_STRING_BIT;
             allocInfo.pUserData = (void*)name;
 
-            vmaCreateBuffer(pDevice->GetAllocator(), &bufferInfo, &allocInfo, &m_bufferVid, &m_bufferAllocVid, nullptr);
+            res = vmaCreateBuffer(pDevice->GetAllocator(), &bufferInfo, &allocInfo, &m_bufferVid, &m_bufferAllocVid, nullptr);
+            assert(res == VK_SUCCESS);
+            SetResourceName(pDevice->GetDevice(), VK_OBJECT_TYPE_BUFFER, (uint64_t)m_bufferVid, "StaticBufferPool (vid mem)");
 #else
 
             // create the buffer, allocate it in VIDEO memory and bind it 
@@ -157,7 +162,11 @@ namespace CAULDRON_VK
         if (m_bUseVidMem)
         {
 #ifdef USE_VMA
-            vmaDestroyBuffer(m_pDevice->GetAllocator(), m_bufferVid, m_bufferAllocVid);
+            if (m_bufferVid != VK_NULL_HANDLE)
+            {
+                vmaDestroyBuffer(m_pDevice->GetAllocator(), m_bufferVid, m_bufferAllocVid);
+                m_bufferVid = VK_NULL_HANDLE;
+            }
 #else
             vkFreeMemory(m_pDevice->GetDevice(), m_deviceMemoryVid, NULL);
             vkDestroyBuffer(m_pDevice->GetDevice(), m_bufferVid, NULL);
@@ -182,7 +191,9 @@ namespace CAULDRON_VK
 
     bool StaticBufferPool::AllocBuffer(uint32_t numbeOfElements, uint32_t strideInBytes, void **pData, VkDescriptorBufferInfo *pOut)
     {
-        uint32_t size = (uint32_t)AlignOffset(numbeOfElements* strideInBytes, 256);
+        std::lock_guard<std::mutex> lock(m_mutex);
+
+        uint32_t size = AlignUp(numbeOfElements* strideInBytes, 256u);
         assert(m_memOffset + size < m_totalMemSize);
 
         *pData = (void *)(m_pData + m_memOffset);
@@ -196,7 +207,7 @@ namespace CAULDRON_VK
         return true;
     }
 
-    bool StaticBufferPool::AllocBuffer(uint32_t numbeOfVertices, uint32_t strideInBytes, void *pInitData, VkDescriptorBufferInfo *pOut)
+    bool StaticBufferPool::AllocBuffer(uint32_t numbeOfVertices, uint32_t strideInBytes, const void *pInitData, VkDescriptorBufferInfo *pOut)
     {
         void *pData;
         if (AllocBuffer(numbeOfVertices, strideInBytes, &pData, pOut))

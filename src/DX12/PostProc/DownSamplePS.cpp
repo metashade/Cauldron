@@ -1,6 +1,6 @@
-// AMD AMDUtils code
+// AMD Cauldron code
 // 
-// Copyright(c) 2018 Advanced Micro Devices, Inc.All rights reserved.
+// Copyright(c) 2020 Advanced Micro Devices, Inc.All rights reserved.
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files(the "Software"), to deal
 // in the Software without restriction, including without limitation the rights
@@ -126,12 +126,11 @@ namespace CAULDRON_DX12
             pCommandList->OMSetRenderTargets(1, &m_mip[i].m_RTV.GetCPU(), true, NULL);
             SetViewportAndScissor(pCommandList, 0, 0, m_Width >> (i + 1), m_Height >> (i + 1));
 
-            cbDownscale *data;
-            D3D12_GPU_VIRTUAL_ADDRESS constantBuffer;
-            m_pConstantBufferRing->AllocConstantBuffer(sizeof(cbDownscale), (void **)&data, &constantBuffer);
-            data->invWidth = 1.0f / (float)(m_Width >> i);
-            data->invHeight = 1.0f / (float)(m_Height >> i);
-            data->mipLevel = i;
+            cbDownscale data;
+            data.mipLevel = i;
+            data.invWidth = 1.0f / (float)(m_Width >> i);
+            data.invHeight = 1.0f / (float)(m_Height >> i);
+            D3D12_GPU_VIRTUAL_ADDRESS constantBuffer = m_pConstantBufferRing->AllocConstantBuffer(sizeof(cbDownscale), &data);
 
             if (i > 0)
             {

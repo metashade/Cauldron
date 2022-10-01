@@ -1,4 +1,4 @@
-// AMD AMDUtils code
+// AMD Cauldron code
 // 
 // Copyright(c) 2018 Advanced Micro Devices, Inc.All rights reserved.
 // Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -24,7 +24,7 @@
 
 namespace CAULDRON_VK
 {
-    bool ExtDebugReportCheckInstanceExtensions(InstanceProperties *pIP, void **pNext);
+    bool ExtDebugReportCheckInstanceExtensions(InstanceProperties *pIP, bool gpuValidation);
     void ExtDebugReportGetProcAddresses(VkInstance instance);
 
     void ExtDebugReportOnCreate(VkInstance instance);

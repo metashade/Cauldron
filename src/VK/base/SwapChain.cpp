@@ -1,4 +1,4 @@
-// AMD AMDUtils code
+// AMD Cauldron code
 // 
 // Copyright(c) 2018 Advanced Micro Devices, Inc.All rights reserved.
 // Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -19,7 +19,8 @@
 
 #include "stdafx.h"
 #include "SwapChain.h"
-#include "ExtFreeSync2.h"
+#include "ExtFreeSyncHDR.h"
+#include "ExtDebugUtils.h"
 #include <vulkan\vulkan_win32.h>
 
 namespace CAULDRON_VK
@@ -36,15 +37,21 @@ namespace CAULDRON_VK
 
         m_hWnd = hWnd;
         m_pDevice = pDevice;
-        m_isFullScreen = false;
         m_backBufferCount = numberBackBuffers;
+        m_semaphoreIndex = 0;
+        m_prevSemaphoreIndex = 0;
+
         m_presentQueue = pDevice->GetPresentQueue();
 
-        // Init FS2
-        fs2Init(pDevice->GetDevice(), pDevice->GetSurface(), pDevice->GetPhysicalDevice(), hWnd);
+        // Init FSHDR
+        fsHdrInit(pDevice->GetDevice(), pDevice->GetSurface(), pDevice->GetPhysicalDevice(), hWnd);
 
         // set some safe format to start with
-        m_swapChainFormat = fs2GetFormat(DISPLAYMODE_SDR);
+        m_displayMode = DISPLAYMODE_SDR;
+        VkSurfaceFormatKHR surfaceFormat;
+        surfaceFormat.format = VK_FORMAT_R8G8B8A8_UNORM;
+        surfaceFormat.colorSpace = VK_COLOR_SPACE_SRGB_NONLINEAR_KHR;
+        m_swapChainFormat = surfaceFormat;
 
         VkDevice device = m_pDevice->GetDevice();
 
@@ -55,22 +62,30 @@ namespace CAULDRON_VK
         m_RenderFinishedSemaphores.resize(m_backBufferCount);
         for (uint32_t i = 0; i < m_backBufferCount; i++)
         {
-            VkFenceCreateInfo fence_ci;
+            VkFenceCreateInfo fence_ci = {};
             fence_ci.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
-            fence_ci.pNext = NULL;
+
+            // In each frame in WaitForSwapChain we wait for the executed fences to become signalled, before we can reuse the respective command buffers.
+            // Hence all of them must start in the signalled bit initially (meaning "can be reused").
             fence_ci.flags = VK_FENCE_CREATE_SIGNALED_BIT;
+
             res = vkCreateFence(device, &fence_ci, NULL, &m_cmdBufExecutedFences[i]);
             assert(res == VK_SUCCESS);
 
-            VkSemaphoreCreateInfo imageAcquiredSemaphoreCreateInfo;
+            VkSemaphoreCreateInfo imageAcquiredSemaphoreCreateInfo = {};
             imageAcquiredSemaphoreCreateInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
-            imageAcquiredSemaphoreCreateInfo.pNext = NULL;
-            imageAcquiredSemaphoreCreateInfo.flags = 0;
 
             res = vkCreateSemaphore(device, &imageAcquiredSemaphoreCreateInfo, NULL, &m_ImageAvailableSemaphores[i]);
             assert(res == VK_SUCCESS);
             res = vkCreateSemaphore(device, &imageAcquiredSemaphoreCreateInfo, NULL, &m_RenderFinishedSemaphores[i]);
             assert(res == VK_SUCCESS);
+        }
+
+        // if SDR then use a gamma corrected swapchain so the blending is correct
+        if (m_displayMode == DISPLAYMODE_SDR)
+        {
+            assert(m_swapChainFormat.format == VK_FORMAT_R8G8B8A8_UNORM);
+            m_swapChainFormat.format = VK_FORMAT_R8G8B8A8_SRGB;
         }
 
         CreateRenderPass();
@@ -98,15 +113,15 @@ namespace CAULDRON_VK
     // EnumerateDisplayModes
     //
     //--------------------------------------------------------------------------------------
-    void SwapChain::EnumerateDisplayModes(std::vector<DisplayModes> *pModes, std::vector<const char *> *pNames)
+    void SwapChain::EnumerateDisplayModes(std::vector<DisplayMode> *pModes, std::vector<const char *> *pNames, bool includeFreesyncHDR, PresentationMode fullscreenMode, bool enableLocalDimming)
     {
-        fs2EnumerateDisplayModes(pModes);
+        fsHdrEnumerateDisplayModes(pModes, includeFreesyncHDR, fullscreenMode, enableLocalDimming);
 
         if (pNames != NULL)
         {
             pNames->clear();
-            for (DisplayModes mode : *pModes)
-                pNames->push_back(fs2GetDisplayModeString(mode));
+            for (DisplayMode mode : *pModes)
+                pNames->push_back(fsHdrGetDisplayModeString(mode));
         }
     }
 
@@ -115,10 +130,10 @@ namespace CAULDRON_VK
     // EnumerateDisplayModes
     //
     //--------------------------------------------------------------------------------------
-    bool SwapChain::IsModeSupported(DisplayModes displayMode)
+    bool SwapChain::IsModeSupported(DisplayMode displayMode, PresentationMode fullscreenMode, bool enableLocalDimming)
     {
-        std::vector<DisplayModes> displayModesAvailable;
-        EnumerateDisplayModes(&displayModesAvailable);
+        std::vector<DisplayMode> displayModesAvailable;
+        EnumerateDisplayModes(&displayModesAvailable, nullptr, displayMode != DISPLAYMODE_SDR, fullscreenMode, enableLocalDimming);
         return  std::find(displayModesAvailable.begin(), displayModesAvailable.end(), displayMode) != displayModesAvailable.end();
     }
 
@@ -134,117 +149,86 @@ namespace CAULDRON_VK
 
     uint32_t SwapChain::WaitForSwapChain()
     {
-        m_prevImageIndex = m_imageIndex;
+        vkAcquireNextImageKHR(m_pDevice->GetDevice(), m_swapChain, UINT64_MAX, m_ImageAvailableSemaphores[m_semaphoreIndex], VK_NULL_HANDLE, &m_imageIndex);
 
-        vkAcquireNextImageKHR(m_pDevice->GetDevice(), m_swapChain, UINT64_MAX, m_ImageAvailableSemaphores[m_imageIndex], VK_NULL_HANDLE, &m_imageIndex);
+        m_prevSemaphoreIndex = m_semaphoreIndex;
+        m_semaphoreIndex++;
+        if (m_semaphoreIndex >= m_backBufferCount)
+            m_semaphoreIndex = 0;
 
-        vkWaitForFences(m_pDevice->GetDevice(), 1, &m_cmdBufExecutedFences[m_imageIndex], VK_TRUE, UINT64_MAX);
-        vkResetFences(m_pDevice->GetDevice(), 1, &m_cmdBufExecutedFences[m_imageIndex]);
+        vkWaitForFences(m_pDevice->GetDevice(), 1, &m_cmdBufExecutedFences[m_semaphoreIndex], VK_TRUE, UINT64_MAX);
+        vkResetFences(m_pDevice->GetDevice(), 1, &m_cmdBufExecutedFences[m_semaphoreIndex]);
 
         return m_imageIndex;
     }
 
     void SwapChain::GetSemaphores(VkSemaphore *pImageAvailableSemaphore, VkSemaphore *pRenderFinishedSemaphores, VkFence *pCmdBufExecutedFences)
     {
-        *pImageAvailableSemaphore = m_ImageAvailableSemaphores[m_prevImageIndex];
-        *pRenderFinishedSemaphores = m_RenderFinishedSemaphores[m_imageIndex];
-        *pCmdBufExecutedFences = m_cmdBufExecutedFences[m_imageIndex];
+        *pImageAvailableSemaphore = m_ImageAvailableSemaphores[m_prevSemaphoreIndex];
+        *pRenderFinishedSemaphores = m_RenderFinishedSemaphores[m_semaphoreIndex];
+        *pCmdBufExecutedFences = m_cmdBufExecutedFences[m_semaphoreIndex];
     }
 
-    void SwapChain::Present()
+    VkResult SwapChain::Present()
     {
         VkPresentInfoKHR present = {};
         present.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
         present.pNext = NULL;
         present.waitSemaphoreCount = 1;
-        present.pWaitSemaphores = &(m_RenderFinishedSemaphores[m_imageIndex]);
+        present.pWaitSemaphores = &(m_RenderFinishedSemaphores[m_semaphoreIndex]);
         present.swapchainCount = 1;
         present.pSwapchains = &m_swapChain;
         present.pImageIndices = &m_imageIndex;
         present.pResults = NULL;
 
         VkResult res = vkQueuePresentKHR(m_presentQueue, &present);
-        assert(res == VK_SUCCESS);
+        return res;
     }
 
     void SwapChain::SetFullScreen(bool fullscreen)
     {
-        m_isFullScreen = fullscreen;
-
-        if (m_isFullScreen)
+        if (ExtAreFSEExtensionsPresent())
         {
-            m_windowedState.IsMaximized = (bool)::IsZoomed(m_hWnd);
-            if (m_windowedState.IsMaximized)
-            {
-                ::SendMessage(m_hWnd, WM_SYSCOMMAND, SC_RESTORE, 0);
-            }
-
-            // Set a window style and size appropriate for full screen mode (removing frame, caption, ...)
-            SetWindowLongPtr(m_hWnd, GWL_STYLE, m_windowedState.Style & ~(WS_CAPTION | WS_THICKFRAME));
-            SetWindowLongPtr(m_hWnd, GWL_EXSTYLE, m_windowedState.ExStyle & ~(WS_EX_DLGMODALFRAME | WS_EX_WINDOWEDGE | WS_EX_CLIENTEDGE | WS_EX_STATICEDGE));
-
-            // Set window size to cover the whole monitor
-            MONITORINFO monitorInfo;
-            monitorInfo.cbSize = sizeof(monitorInfo);
-            GetMonitorInfo(MonitorFromWindow(m_hWnd, MONITOR_DEFAULTTONEAREST), &monitorInfo);
-            SetWindowPos(m_hWnd, NULL,
-                monitorInfo.rcMonitor.left,
-                monitorInfo.rcMonitor.top,
-                monitorInfo.rcMonitor.right - monitorInfo.rcMonitor.left,
-                monitorInfo.rcMonitor.bottom - monitorInfo.rcMonitor.top,
-                SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED);
-        }
-        else
-        {
-            // Back to windowed mode, set the original window style and size.  
-            SetWindowLongPtr(m_hWnd, GWL_STYLE, m_windowedState.Style);
-            SetWindowLongPtr(m_hWnd, GWL_EXSTYLE, m_windowedState.ExStyle);
-
-            // Set the original window position and size.
-            SetWindowPos(m_hWnd, NULL,
-                m_windowedState.WindowRect.left,
-                m_windowedState.WindowRect.top,
-                m_windowedState.WindowRect.right - m_windowedState.WindowRect.left,
-                m_windowedState.WindowRect.bottom - m_windowedState.WindowRect.top,
-                SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED);
-
-            if (m_windowedState.IsMaximized)
-            {
-                ::SendMessage(m_hWnd, WM_SYSCOMMAND, SC_MAXIMIZE, 0);
-            }
-        }
-
-        if (ExtFreeSync2AreAllExtensionsPresent())
-        {
-            fs2SetFullscreenState(fullscreen, m_swapChain);
+            fsHdrSetFullscreenState(fullscreen, m_swapChain);
         }
     }
 
-    void SwapChain::OnCreateWindowSizeDependentResources(uint32_t dwWidth, uint32_t dwHeight, bool bVSyncOn, DisplayModes displayMode)
+    void SwapChain::OnCreateWindowSizeDependentResources(uint32_t dwWidth, uint32_t dwHeight, bool bVSyncOn, DisplayMode displayMode, PresentationMode fullscreenMode, bool enableLocalDimming)
     {
         // check whether the requested mode is supported and fall back to SDR if not supported
-        bool bIsModeSupported = IsModeSupported(displayMode);
+        bool bIsModeSupported = IsModeSupported(displayMode, fullscreenMode, enableLocalDimming);
         if (bIsModeSupported == false)
         {
-            assert(!"FS2 display mode not supported");
+            assert(!"FSHDR display mode not supported");
             displayMode = DISPLAYMODE_SDR;
         }
 
         m_displayMode = displayMode;
-        m_swapChainFormat = fs2GetFormat(displayMode);
+        m_swapChainFormat = fsHdrGetFormat(displayMode);
         m_bVSyncOn = bVSyncOn;
-
-        // note that FS2 modes require to be in fullscreen mode!
-        if (m_displayMode != DISPLAYMODE_SDR)
-        {
-            assert(m_isFullScreen == true);
-        }
 
         // if SDR then use a gamma corrected swapchain so the blending is correct
         if (m_displayMode == DISPLAYMODE_SDR)
-        {            
-            assert(m_swapChainFormat.format == VK_FORMAT_B8G8R8A8_UNORM);
-            m_swapChainFormat.format = VK_FORMAT_B8G8R8A8_SRGB;
+        {
+            // Query support for VK_FORMAT_R8G8B8A8_SRGB or VK_FORMAT_B8G8R8A8_SRGB
+            uint32_t formatCount = 0;
+            std::vector<VkSurfaceFormatKHR> surfaceFormats;
+            vkGetPhysicalDeviceSurfaceFormatsKHR(m_pDevice->GetPhysicalDevice(), m_pDevice->GetSurface(), &formatCount, nullptr);
+
+            if (formatCount != 0)
+            {
+                surfaceFormats.resize(formatCount);
+                vkGetPhysicalDeviceSurfaceFormatsKHR(m_pDevice->GetPhysicalDevice(), m_pDevice->GetSurface(), &formatCount, &surfaceFormats[0]);
+            }
+
+            for (int i = 0; i < surfaceFormats.size(); i++)
+            {
+                if ((surfaceFormats[i].format == VK_FORMAT_R8G8B8A8_SRGB || surfaceFormats[i].format == VK_FORMAT_B8G8R8A8_SRGB) && surfaceFormats[i].colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR)
+                {
+                    m_swapChainFormat = surfaceFormats[i];
+                    break;
+                }
+            }
         }
 
         VkResult res;
@@ -256,18 +240,9 @@ namespace CAULDRON_VK
         DestroyRenderPass();
         CreateRenderPass();
 
-        // Get capabilities
-        //
         VkSurfaceCapabilitiesKHR surfCapabilities;
-        if (displayMode != DISPLAYMODE_SDR)
-        {
-            fs2GetPhysicalDeviceSurfaceCapabilities2KHR(physicaldevice, surface, &surfCapabilities);
-        }
-        else
-        {
-            res = vkGetPhysicalDeviceSurfaceCapabilitiesKHR(physicaldevice, surface, &surfCapabilities);
-            assert(res == VK_SUCCESS);
-        }
+        res = vkGetPhysicalDeviceSurfaceCapabilitiesKHR(physicaldevice, surface, &surfCapabilities);
+        assert(res == VK_SUCCESS);
 
         VkExtent2D swapchainExtent;
         swapchainExtent.width = dwWidth;
@@ -335,9 +310,10 @@ namespace CAULDRON_VK
         VkSwapchainCreateInfoKHR swapchain_ci = {};
         swapchain_ci.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
         swapchain_ci.pNext = nullptr;
-        if (ExtFreeSync2AreAllExtensionsPresent())
+        if (ExtAreFSEExtensionsPresent())
         {
-            swapchain_ci.pNext = GetVkSwapchainDisplayNativeHdrCreateInfoAMD();
+            // NOTE: what GetVkSurfaceFullScreenExclusiveInfoEXT returns is set up by the previous IsModeSupported call
+            swapchain_ci.pNext = GetVkSurfaceFullScreenExclusiveInfoEXT();
         }
         swapchain_ci.surface = surface;
         swapchain_ci.imageFormat = m_swapChainFormat.format;
@@ -370,7 +346,13 @@ namespace CAULDRON_VK
         res = vkCreateSwapchainKHR(device, &swapchain_ci, NULL, &m_swapChain);
         assert(res == VK_SUCCESS);
 
-        fs2SetDisplayMode(displayMode, m_swapChain);
+        // Get capabilities is only for FS HDR
+        //
+        if (displayMode == DISPLAYMODE_FSHDR_Gamma22 || displayMode == DISPLAYMODE_FSHDR_SCRGB)
+        {
+            fsHdrGetPhysicalDeviceSurfaceCapabilities2KHR(physicaldevice, surface, nullptr);
+        }
+        fsHdrSetDisplayMode(displayMode, m_swapChain);
 
         // we are querying the swapchain count so the next call doesn't generate a validation warning
         uint32_t backBufferCount;
@@ -385,14 +367,6 @@ namespace CAULDRON_VK
 
         CreateRTV();
         CreateFramebuffers(dwWidth, dwHeight);
-
-        // keep track of the window size, so when we know switch from fullscreen mode into windowed
-        if (m_isFullScreen == false)
-        {
-            m_windowedState.Style = GetWindowLongPtr(m_hWnd, GWL_STYLE);
-            m_windowedState.ExStyle = GetWindowLongPtr(m_hWnd, GWL_EXSTYLE);
-            GetWindowRect(m_hWnd, &m_windowedState.WindowRect);
-        }
 
         m_imageIndex = 0;
     }
@@ -433,6 +407,15 @@ namespace CAULDRON_VK
         subpass.preserveAttachmentCount = 0;
         subpass.pPreserveAttachments = NULL;
 
+        VkSubpassDependency dep = {};
+        dep.dependencyFlags = 0;
+        dep.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+        dep.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+        dep.dstSubpass = 0;
+        dep.srcAccessMask = 0;
+        dep.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+        dep.srcSubpass = VK_SUBPASS_EXTERNAL;
+
         VkRenderPassCreateInfo rp_info = {};
         rp_info.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
         rp_info.pNext = NULL;
@@ -440,8 +423,8 @@ namespace CAULDRON_VK
         rp_info.pAttachments = attachments;
         rp_info.subpassCount = 1;
         rp_info.pSubpasses = &subpass;
-        rp_info.dependencyCount = 0;
-        rp_info.pDependencies = NULL;
+        rp_info.dependencyCount = 1;
+        rp_info.pDependencies = &dep;
 
         VkResult res = vkCreateRenderPass(m_pDevice->GetDevice(), &rp_info, NULL, &m_render_pass_swap_chain);
         assert(res == VK_SUCCESS);
@@ -480,6 +463,8 @@ namespace CAULDRON_VK
 
             VkResult res = vkCreateImageView(m_pDevice->GetDevice(), &color_image_view, NULL, &m_imageViews[i]);
             assert(res == VK_SUCCESS);
+
+            SetResourceName(m_pDevice->GetDevice(), VK_OBJECT_TYPE_IMAGE_VIEW, (uint64_t)m_imageViews[i], "Swapchain");
         }
     }
 
@@ -510,6 +495,8 @@ namespace CAULDRON_VK
 
             VkResult res = vkCreateFramebuffer(m_pDevice->GetDevice(), &fb_info, NULL, &m_framebuffers[i]);
             assert(res == VK_SUCCESS);
+
+            SetResourceName(m_pDevice->GetDevice(), VK_OBJECT_TYPE_FRAMEBUFFER, (uint64_t)m_framebuffers[i], "Swapchain");
         }
     }
 

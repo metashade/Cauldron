@@ -1,6 +1,6 @@
-// AMD AMDUtils code
+// AMD Cauldron code
 // 
-// Copyright(c) 2018 Advanced Micro Devices, Inc.All rights reserved.
+// Copyright(c) 2020 Advanced Micro Devices, Inc.All rights reserved.
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files(the "Software"), to deal
 // in the Software without restriction, including without limitation the rights
@@ -30,7 +30,7 @@ namespace CAULDRON_DX12
     //--------------------------------------------------------------------------------------
     void DynamicBufferRing::OnCreate(Device *pDevice, uint32_t numberOfBackBuffers, uint32_t memTotalSize, ResourceViewHeaps *pHeaps)
     {
-        m_memTotalSize = (uint32_t)AlignOffset(memTotalSize, 256);
+        m_memTotalSize = AlignUp(memTotalSize, 256u);
 
         m_mem.OnCreate(numberOfBackBuffers, memTotalSize);
 
@@ -64,7 +64,7 @@ namespace CAULDRON_DX12
     //--------------------------------------------------------------------------------------
     bool DynamicBufferRing::AllocConstantBuffer(uint32_t size, void **pData, D3D12_GPU_VIRTUAL_ADDRESS *pBufferViewDesc)
     {
-        size = (uint32_t)AlignOffset(size, 256);
+        size = AlignUp(size, 256u);
 
         uint32_t memOffset;
         if (m_mem.Alloc(size, &memOffset) == false)
@@ -80,6 +80,18 @@ namespace CAULDRON_DX12
         return true;
     }
 
+    D3D12_GPU_VIRTUAL_ADDRESS DynamicBufferRing::AllocConstantBuffer(uint32_t size, const void *pInitData)
+    {
+        void *pBuffer;
+        D3D12_GPU_VIRTUAL_ADDRESS bufferViewDesc;
+        if (AllocConstantBuffer(size, &pBuffer, &bufferViewDesc))
+        {
+            memcpy(pBuffer, pInitData, size);
+        }
+
+        return bufferViewDesc;
+    }
+
     //--------------------------------------------------------------------------------------
     //
     // AllocVertexBuffer
@@ -87,14 +99,13 @@ namespace CAULDRON_DX12
     //--------------------------------------------------------------------------------------
     bool DynamicBufferRing::AllocVertexBuffer(uint32_t numbeOfVertices, uint32_t strideInBytes, void **pData, D3D12_VERTEX_BUFFER_VIEW *pView)
     {
-        uint32_t size = (uint32_t)AlignOffset(numbeOfVertices * strideInBytes, 256);
+        uint32_t size = AlignUp(numbeOfVertices * strideInBytes, 256u);
 
         uint32_t memOffset;
         if (m_mem.Alloc(size, &memOffset) == false)
             return false;
 
         *pData = (void *)(m_pData + memOffset);
-
 
         pView->BufferLocation = m_pBuffer->GetGPUVirtualAddress() + memOffset;
         pView->StrideInBytes = strideInBytes;
@@ -105,7 +116,9 @@ namespace CAULDRON_DX12
 
     bool DynamicBufferRing::AllocIndexBuffer(uint32_t numbeOfIndices, uint32_t strideInBytes, void **pData, D3D12_INDEX_BUFFER_VIEW *pView)
     {
-        uint32_t size = (uint32_t)AlignOffset(numbeOfIndices*strideInBytes, 256);
+        assert(strideInBytes == 2 || strideInBytes == 4);
+
+        uint32_t size = AlignUp(numbeOfIndices * strideInBytes, 256u);
 
         uint32_t memOffset;
         if (m_mem.Alloc(size, &memOffset) == false)

@@ -1,6 +1,6 @@
-// AMD AMDUtils code
+// AMD Cauldron code
 // 
-// Copyright(c) 2018 Advanced Micro Devices, Inc.All rights reserved.
+// Copyright(c) 2020 Advanced Micro Devices, Inc.All rights reserved.
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files(the "Software"), to deal
 // in the Software without restriction, including without limitation the rights
@@ -22,7 +22,7 @@
 
 static HWND g_hWnd;
 
-bool ImGUI_Init(void* hwnd)
+bool ImGUI_Init(void *hwnd)
 {
     g_hWnd = (HWND)hwnd;
 
@@ -56,17 +56,19 @@ bool ImGUI_Init(void* hwnd)
 void ImGUI_Shutdown()
 {
     ImGui::Shutdown();
-    g_hWnd = (HWND)0;
+    g_hWnd = NULL;
 }
 
-void ImGUI_UpdateIO()
+void ImGUI_UpdateIO(int w, int h)
 {
     ImGuiIO& io = ImGui::GetIO();
 
     // Setup display size (every frame to accommodate for window resizing)
     RECT rect;
     GetClientRect(g_hWnd, &rect);
-    io.DisplaySize = ImVec2((float)(rect.right - rect.left), (float)(rect.bottom - rect.top));
+    ImVec2 windowSize((float)(rect.right - rect.left), (float)(rect.bottom - rect.top));
+
+    io.DisplaySize = ImVec2((float)w, (float)h);
 
     // Read keyboard modifiers inputs
     io.KeyCtrl = (GetKeyState(VK_CONTROL) & 0x8000) != 0;
@@ -95,6 +97,12 @@ static bool IsAnyMouseButtonDown()
 IMGUI_API LRESULT ImGUI_WndProcHandler(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 {
     ImGuiIO& io = ImGui::GetIO();
+
+    // Setup display size (every frame to accommodate for window resizing)
+    RECT rect;
+    GetClientRect(g_hWnd, &rect);
+    ImVec2 scale(io.DisplaySize.x / (float)(rect.right - rect.left), io.DisplaySize.y / (float)(rect.bottom - rect.top));
+
     switch (msg)
     {
     case WM_LBUTTONDOWN:
@@ -103,8 +111,8 @@ IMGUI_API LRESULT ImGUI_WndProcHandler(HWND hwnd, UINT msg, WPARAM wParam, LPARA
     {
         int button = 0;
         if (msg == WM_LBUTTONDOWN) button = 0;
-        if (msg == WM_RBUTTONDOWN) button = 1;
-        if (msg == WM_MBUTTONDOWN) button = 2;
+        else if (msg == WM_RBUTTONDOWN) button = 1;
+        else if (msg == WM_MBUTTONDOWN) button = 2;
         if (!IsAnyMouseButtonDown() && GetCapture() == NULL)
             SetCapture(hwnd);
         io.MouseDown[button] = true;
@@ -116,8 +124,8 @@ IMGUI_API LRESULT ImGUI_WndProcHandler(HWND hwnd, UINT msg, WPARAM wParam, LPARA
     {
         int button = 0;
         if (msg == WM_LBUTTONUP) button = 0;
-        if (msg == WM_RBUTTONUP) button = 1;
-        if (msg == WM_MBUTTONUP) button = 2;
+        else if (msg == WM_RBUTTONUP) button = 1;
+        else if (msg == WM_MBUTTONUP) button = 2;
         io.MouseDown[button] = false;
         if (!IsAnyMouseButtonDown() && GetCapture() == hwnd)
             ReleaseCapture();
@@ -127,18 +135,18 @@ IMGUI_API LRESULT ImGUI_WndProcHandler(HWND hwnd, UINT msg, WPARAM wParam, LPARA
         io.MouseWheel += GET_WHEEL_DELTA_WPARAM(wParam) > 0 ? +1.0f : -1.0f;
         return 0;
     case WM_MOUSEMOVE:
-        io.MousePos.x = (signed short)(lParam);
-        io.MousePos.y = (signed short)(lParam >> 16);
+        io.MousePos.x = (signed short)(lParam) * scale.x;
+        io.MousePos.y = (signed short)(lParam >> 16) * scale.y;
         return 0;
     case WM_KEYDOWN:
     case WM_SYSKEYDOWN:
         if (wParam < 256)
-            io.KeysDown[wParam] = 1;
+            io.KeysDown[wParam] = true;
         return 0;
     case WM_KEYUP:
     case WM_SYSKEYUP:
         if (wParam < 256)
-            io.KeysDown[wParam] = 0;
+            io.KeysDown[wParam] = false;
         return 0;
     case WM_CHAR:
         // You can also use ToAscii()+GetKeyboardState() to retrieve characters.

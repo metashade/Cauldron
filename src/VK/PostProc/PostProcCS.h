@@ -1,4 +1,4 @@
-// AMD AMDUtils code
+// AMD Cauldron code
 // 
 // Copyright(c) 2018 Advanced Micro Devices, Inc.All rights reserved.
 // Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -28,14 +28,15 @@ namespace CAULDRON_VK
     public:
         void OnCreate(
             Device* pDevice,
-            const std::string &filename,
-            const std::string &entryPoint,
+            const std::string &shaderFilename,
+            const std::string &shaderEntryPoint,
+            const std::string &shaderCompilerParams,
             VkDescriptorSetLayout descriptorSetLayout,
             uint32_t dwWidth, uint32_t dwHeight, uint32_t dwDepth,
             DefineList* userDefines = 0
         );
         void OnDestroy();
-        void Draw(VkCommandBuffer cmd_buf, VkDescriptorBufferInfo constantBuffer, VkDescriptorSet descSet, uint32_t dispatchX, uint32_t dispatchY, uint32_t dispatchZ);
+        void Draw(VkCommandBuffer cmd_buf, VkDescriptorBufferInfo *pConstantBuffer, VkDescriptorSet descSet, uint32_t dispatchX, uint32_t dispatchY, uint32_t dispatchZ);
 
     private:
         Device* m_pDevice;

@@ -1,4 +1,4 @@
-// AMD AMDUtils code
+// AMD Cauldron code
 // 
 // Copyright(c) 2018 Advanced Micro Devices, Inc.All rights reserved.
 // Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -80,7 +80,7 @@ namespace CAULDRON_VK
             return true;
         }
 
-        Trace("Opps!! The instance layer '%s' has not been found\n", instanceLayerName);
+        Trace("The instance layer '%s' has not been found\n", instanceLayerName);
 
         return false;
     }
@@ -93,7 +93,7 @@ namespace CAULDRON_VK
             return true;
         }
 
-        Trace("Opps!! The instance extension '%s' has not been found\n", instanceExtensionName);
+        Trace("The instance extension '%s' has not been found\n", instanceExtensionName);
 
         return false;
     }

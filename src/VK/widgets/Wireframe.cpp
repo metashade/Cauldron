@@ -1,4 +1,4 @@
-// AMD AMDUtils code
+// AMD Cauldron code
 // 
 // Copyright(c) 2018 Advanced Micro Devices, Inc.All rights reserved.
 // Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -19,6 +19,7 @@
 
 #include "stdafx.h"
 #include "Base/Device.h"
+#include "Base/ExtDebugUtils.h"
 #include "Base/ShaderCompilerHelper.h"
 #include "Wireframe.h"
 
@@ -30,23 +31,15 @@ namespace CAULDRON_VK
         ResourceViewHeaps *pResourceViewHeaps,
         DynamicBufferRing *pDynamicBufferRing,
         StaticBufferPool *pStaticBufferPool,
-        std::vector<float> *pVertices,
-        std::vector<short> *pIndices,
-        VkSampleCountFlagBits sampleDescCount)
+        VkSampleCountFlagBits sampleDescCount,
+        bool invertedDepth)
     {
         VkResult res;
 
         m_pDevice = pDevice;
         m_pDynamicBufferRing = pDynamicBufferRing;
-        m_pStaticBufferPool = pStaticBufferPool;
         m_pResourceViewHeaps = pResourceViewHeaps;
-
-        // set indices
-        m_NumIndices = (uint32_t)pIndices->size();
-        m_indexType = VK_INDEX_TYPE_UINT16;
-        m_pStaticBufferPool->AllocBuffer(m_NumIndices, sizeof(short), pIndices->data(), &m_IBV);
-
-        m_pStaticBufferPool->AllocBuffer((uint32_t)(pVertices->size() / 3), (uint32_t)(3 * sizeof(float)), pVertices->data(), &m_VBV);
+        m_bInvertedDepth = invertedDepth;
 
         // the vertex shader
         static const char* vertexShader =
@@ -84,11 +77,11 @@ namespace CAULDRON_VK
         DefineList attributeDefines;
 
         VkPipelineShaderStageCreateInfo m_vertexShader;
-        res = VKCompileFromString(pDevice->GetDevice(), SST_GLSL, VK_SHADER_STAGE_VERTEX_BIT, vertexShader, "main", &attributeDefines, &m_vertexShader);
+        res = VKCompileFromString(pDevice->GetDevice(), SST_GLSL, VK_SHADER_STAGE_VERTEX_BIT, vertexShader, "main", "", &attributeDefines, &m_vertexShader);
         assert(res == VK_SUCCESS);
 
         VkPipelineShaderStageCreateInfo m_fragmentShader;
-        res = VKCompileFromString(pDevice->GetDevice(), SST_GLSL, VK_SHADER_STAGE_FRAGMENT_BIT, pixelShader, "main", &attributeDefines, &m_fragmentShader);
+        res = VKCompileFromString(pDevice->GetDevice(), SST_GLSL, VK_SHADER_STAGE_FRAGMENT_BIT, pixelShader, "main", "", &attributeDefines, &m_fragmentShader);
         assert(res == VK_SUCCESS);
 
         std::vector<VkPipelineShaderStageCreateInfo> shaderStages = { m_vertexShader, m_fragmentShader };
@@ -227,7 +220,7 @@ namespace CAULDRON_VK
         ds.flags = 0;
         ds.depthTestEnable = true;
         ds.depthWriteEnable = true;
-        ds.depthCompareOp = VK_COMPARE_OP_LESS_OR_EQUAL;
+        ds.depthCompareOp = m_bInvertedDepth ? VK_COMPARE_OP_GREATER_OR_EQUAL : VK_COMPARE_OP_LESS_OR_EQUAL;
         ds.depthBoundsTestEnable = VK_FALSE;
         ds.stencilTestEnable = VK_FALSE;
         ds.back.failOp = VK_STENCIL_OP_KEEP;
@@ -280,7 +273,7 @@ namespace CAULDRON_VK
 
         res = vkCreateGraphicsPipelines(pDevice->GetDevice(), pDevice->GetPipelineCache(), 1, &pipeline, NULL, &m_pipeline);
         assert(res == VK_SUCCESS);
-
+        SetResourceName(m_pDevice->GetDevice(), VK_OBJECT_TYPE_PIPELINE, (uint64_t)m_pipeline, "Wireframe P");
     }
 
     void Wireframe::OnDestroy()
@@ -291,10 +284,10 @@ namespace CAULDRON_VK
         m_pResourceViewHeaps->FreeDescriptor(m_descriptorSet);
     }
 
-    void Wireframe::Draw(VkCommandBuffer cmd_buf, XMMATRIX worldMatrix, XMVECTOR vCenter, XMVECTOR vRadius, XMVECTOR vColor)
+    void Wireframe::Draw(VkCommandBuffer cmd_buf, int numIndices, VkDescriptorBufferInfo IBV, VkDescriptorBufferInfo VBV, const math::Matrix4& worldMatrix, const math::Vector4& vCenter, const math::Vector4& vRadius, const math::Vector4& vColor)
     {
-        vkCmdBindVertexBuffers(cmd_buf, 0, 1, &m_VBV.buffer, &m_VBV.offset);
-        vkCmdBindIndexBuffer(cmd_buf, m_IBV.buffer, m_IBV.offset, m_indexType);
+        vkCmdBindVertexBuffers(cmd_buf, 0, 1, &VBV.buffer, &VBV.offset);
+        vkCmdBindIndexBuffer(cmd_buf, IBV.buffer, IBV.offset, VK_INDEX_TYPE_UINT16);
 
         vkCmdBindPipeline(cmd_buf, VK_PIPELINE_BIND_POINT_GRAPHICS, m_pipeline);
 
@@ -313,6 +306,6 @@ namespace CAULDRON_VK
         uint32_t uniformOffsets[1] = { (uint32_t)perObjectDesc.offset };
         vkCmdBindDescriptorSets(cmd_buf, VK_PIPELINE_BIND_POINT_GRAPHICS, m_pipelineLayout, 0, 1, descritorSets, 1, uniformOffsets);
 
-        vkCmdDrawIndexed(cmd_buf, m_NumIndices, 1, 0, 0, 0);
+        vkCmdDrawIndexed(cmd_buf, numIndices, 1, 0, 0, 0);
     }
 }

@@ -1,6 +1,6 @@
-// AMD AMDUtils code
+// AMD Cauldron code
 // 
-// Copyright(c) 2018 Advanced Micro Devices, Inc.All rights reserved.
+// Copyright(c) 2020 Advanced Micro Devices, Inc.All rights reserved.
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files(the "Software"), to deal
 // in the Software without restriction, including without limitation the rights
@@ -18,10 +18,9 @@
 // THE SOFTWARE.
 
 #pragma once
-
+#include <cassert>
 // This is the typical ring buffer, it is used by resources that will be reused. 
-// For example the command Lists, the 'dynamic' constant buffers, etc..
-//
+// For example, commandlists and 'dynamic' constant buffers, etc..
 class Ring
 {
 public:
@@ -63,7 +62,7 @@ public:
 
     bool Free(uint32_t size)
     {
-        if (m_AllocatedSize > size)
+        if (m_AllocatedSize >= size)
         {
             m_Head = (m_Head + size) % m_TotalSize;
             m_AllocatedSize -= size;

@@ -1,6 +1,6 @@
-// AMD AMDUtils code
+// AMD Cauldron code
 // 
-// Copyright(c) 2018 Advanced Micro Devices, Inc.All rights reserved.
+// Copyright(c) 2020 Advanced Micro Devices, Inc.All rights reserved.
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files(the "Software"), to deal
 // in the Software without restriction, including without limitation the rights
@@ -39,7 +39,7 @@ namespace CAULDRON_DX12
             Wireframe *pWireframe);
 
         void OnDestroy();
-        void Draw(ID3D12GraphicsCommandList* pCommandList, XMMATRIX cameraViewProjMatrix);
+        void Draw(ID3D12GraphicsCommandList* pCommandList, math::Matrix4 cameraViewProjMatrix);
     private:
         GLTFTexturesAndBuffers *m_pGLTFTexturesAndBuffers;
         

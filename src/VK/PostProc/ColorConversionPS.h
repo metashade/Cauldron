@@ -1,4 +1,4 @@
-// AMD AMDUtils code
+// AMD Cauldron code
 // 
 // Copyright(c) 2018 Advanced Micro Devices, Inc.All rights reserved.
 // Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -29,9 +29,9 @@ namespace CAULDRON_VK
         void OnCreate(Device* pDevice, VkRenderPass renderPass, ResourceViewHeaps *pResourceViewHeaps, StaticBufferPool  *pStaticBufferPool, DynamicBufferRing *pDynamicBufferRing);
         void OnDestroy();
 
-        void UpdatePipelines(VkRenderPass renderPass, DisplayModes displayMode);
+        void UpdatePipelines(VkRenderPass renderPass, DisplayMode displayMode);
 
-        void Draw(VkCommandBuffer cmd_buf, VkImageView HDRSRV, float exposure, int toneMapper, bool applyGamma = true);
+        void Draw(VkCommandBuffer cmd_buf, VkImageView HDRSRV, uint32_t isLPMToneMapperSelected = 0);
 
     private:
         Device* m_pDevice;
@@ -50,12 +50,14 @@ namespace CAULDRON_VK
 
         struct ColorConversionConsts
         {
-            XMMATRIX m_contentToMonitorRecMatrix;
-            DisplayModes m_displayMode;
+            math::Matrix4 m_contentToMonitorRecMatrix;
+            DisplayMode m_displayMode;
             float m_displayMinLuminancePerNits;
             float m_displayMaxLuminancePerNits;
+            uint32_t m_isLPMToneMapperSelected;
         };
 
         ColorConversionConsts m_colorConversionConsts;
     };
 }
+

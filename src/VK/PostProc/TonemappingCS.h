@@ -1,4 +1,4 @@
-// AMD AMDUtils code
+// AMD Cauldron code
 // 
 // Copyright(c) 2018 Advanced Micro Devices, Inc.All rights reserved.
 // Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -18,6 +18,7 @@
 // THE SOFTWARE.
 #pragma once
 
+#include "Misc/ColorConversion.h"
 #include "PostProcCS.h"
 #include "Base/ResourceViewHeaps.h"
 
@@ -44,6 +45,9 @@ namespace CAULDRON_VK
         VkDescriptorSet       m_descriptorSet[s_descriptorBuffers];
         VkDescriptorSetLayout m_descriptorSetLayout;
 
-        struct ToneMappingConsts { float exposure; int toneMapper; int applyGamma; };
+        struct ToneMappingConsts {
+            float exposure; int toneMapper; float pad0; float pad1;
+            LPMConsts lpmConsts;
+        };
     };
 }

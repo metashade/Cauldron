@@ -1,4 +1,4 @@
-// AMD AMDUtils code
+// AMD Cauldron code
 // 
 // Copyright(c) 2018 Advanced Micro Devices, Inc.All rights reserved.
 // Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -20,7 +20,7 @@
 #include "stdafx.h"
 #include "Base/DynamicBufferRing.h"
 #include "Base/StaticBufferPool.h"
-#include "Base/ExtDebugMarkers.h"
+#include "Base/ExtDebugUtils.h"
 #include "Base/UploadHeap.h"
 #include "Base/Helper.h"
 #include "Base/Texture.h"
@@ -28,14 +28,16 @@
 
 namespace CAULDRON_VK
 {
-    void SkyDome::OnCreate(Device* pDevice, VkRenderPass renderPass, UploadHeap* pUploadHeap, VkFormat outFormat, ResourceViewHeaps *pResourceViewHeaps, DynamicBufferRing *pDynamicBufferRing, StaticBufferPool  *pStaticBufferPool, char *pDiffuseCubemap, char *pSpecularCubemap, VkSampleCountFlagBits sampleDescCount)
+    void SkyDome::OnCreate(Device* pDevice, VkRenderPass renderPass, UploadHeap* pUploadHeap, VkFormat outFormat, ResourceViewHeaps *pResourceViewHeaps, DynamicBufferRing *pDynamicBufferRing, StaticBufferPool  *pStaticBufferPool, const char *pDiffuseCubemap, const char *pSpecularCubemap, VkSampleCountFlagBits sampleDescCount, bool invertedDepth)
     {
         m_pDevice = pDevice;
         m_pDynamicBufferRing = pDynamicBufferRing;
         m_pResourceViewHeaps = pResourceViewHeaps;
+        m_bInvertedDepth = invertedDepth;
 
         m_CubeDiffuseTexture.InitFromFile(pDevice, pUploadHeap, pDiffuseCubemap, true); // SRGB
         m_CubeSpecularTexture.InitFromFile(pDevice, pUploadHeap, pSpecularCubemap, true);
+        
         pUploadHeap->FlushAndFinish();
 
         m_CubeDiffuseTexture.CreateCubeSRV(&m_CubeDiffuseTextureView);
@@ -89,10 +91,10 @@ namespace CAULDRON_VK
         layout_bindings[1].pImmutableSamplers = NULL;
 
         m_pResourceViewHeaps->CreateDescriptorSetLayoutAndAllocDescriptorSet(&layout_bindings, &m_descriptorLayout, &m_descriptorSet);
-        pDynamicBufferRing->SetDescriptorSet(0, sizeof(XMMATRIX), m_descriptorSet);
+        pDynamicBufferRing->SetDescriptorSet(0, sizeof(math::Matrix4), m_descriptorSet);
         SetDescriptorSpec(1, m_descriptorSet);
 
-        m_skydome.OnCreate(pDevice, renderPass, "SkyDome.glsl", pStaticBufferPool, pDynamicBufferRing, m_descriptorLayout, NULL, sampleDescCount);
+        m_skydome.OnCreate(pDevice, renderPass, "SkyDome.glsl", "main", "", pStaticBufferPool, pDynamicBufferRing, m_descriptorLayout, NULL, sampleDescCount, m_bInvertedDepth);
     }
 
     void SkyDome::OnDestroy()
@@ -122,16 +124,16 @@ namespace CAULDRON_VK
         SetDescriptorSet(m_pDevice->GetDevice(), index, m_CubeSpecularTextureView, &m_samplerSpecularCube, descriptorSet);
     }
 
-    void SkyDome::Draw(VkCommandBuffer cmd_buf, XMMATRIX invViewProj)
+    void SkyDome::Draw(VkCommandBuffer cmd_buf, const math::Matrix4& invViewProj)
     {
         SetPerfMarkerBegin(cmd_buf, "Skydome cube");
 
-        XMMATRIX *cbPerDraw;
+        math::Matrix4*cbPerDraw;
         VkDescriptorBufferInfo constantBuffer;
-        m_pDynamicBufferRing->AllocConstantBuffer(sizeof(XMMATRIX), (void **)&cbPerDraw, &constantBuffer);
+        m_pDynamicBufferRing->AllocConstantBuffer(sizeof(math::Matrix4), (void **)&cbPerDraw, &constantBuffer);
         *cbPerDraw = invViewProj;
 
-        m_skydome.Draw(cmd_buf, constantBuffer, m_descriptorSet);
+        m_skydome.Draw(cmd_buf, &constantBuffer, m_descriptorSet);
 
         SetPerfMarkerEnd(cmd_buf);
     }
@@ -140,5 +142,28 @@ namespace CAULDRON_VK
     void SkyDome::GenerateDiffuseMapFromEnvironmentMap()
     {
 
+    }
+
+    // Sampler and TextureView getters
+    //
+
+    VkImageView SkyDome::GetCubeDiffuseTextureView() const
+    {
+        return m_CubeDiffuseTextureView;
+    }
+
+    VkImageView SkyDome::GetCubeSpecularTextureView() const
+    {
+        return m_CubeSpecularTextureView;
+    }
+
+    VkSampler SkyDome::GetCubeDiffuseTextureSampler() const
+    {
+        return m_samplerDiffuseCube;
+    }
+
+    VkSampler SkyDome::GetCubeSpecularTextureSampler() const
+    {
+        return m_samplerSpecularCube;
     }
 }

@@ -1,4 +1,4 @@
-// AMD AMDUtils code
+// AMD Cauldron code
 // 
 // Copyright(c) 2018 Advanced Micro Devices, Inc.All rights reserved.
 // Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -27,7 +27,6 @@ namespace CAULDRON_VK
     {
         m_pDevice = pDevice;
         m_NumberOfBackBuffers = numberOfBackBuffers;
-        m_queryNeedsInitialReset = true;
         m_frame = 0;
 
         const VkQueryPoolCreateInfo queryPoolCreateInfo =
@@ -51,47 +50,72 @@ namespace CAULDRON_VK
             m_labels[i].clear();
     }
 
-    void GPUTimestamps::GetTimeStamp(VkCommandBuffer cmd_buf, char *label)
+    void GPUTimestamps::GetTimeStamp(VkCommandBuffer cmd_buf, const char *label)
     {
         uint32_t measurements = (uint32_t)m_labels[m_frame].size();
-        uint32_t offset = m_frame*MaxValuesPerFrame + measurements;
+        uint32_t offset = m_frame * MaxValuesPerFrame + measurements;
 
         vkCmdWriteTimestamp(cmd_buf, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, m_QueryPool, offset);
 
         m_labels[m_frame].push_back(label);
     }
 
-    void GPUTimestamps::OnBeginFrame(VkCommandBuffer cmd_buf, std::vector<TimeStamp> *pTimestamp)
+    void GPUTimestamps::GetTimeStampUser(TimeStamp ts)
     {
-        if (m_queryNeedsInitialReset)
+        m_cpuTimeStamps[m_frame].push_back(ts);
+    }
+
+    void GPUTimestamps::OnBeginFrame(VkCommandBuffer cmd_buf, std::vector<TimeStamp> *pTimestamps)
+    {
+        std::vector<TimeStamp> &cpuTimeStamps = m_cpuTimeStamps[m_frame];
+        std::vector<std::string> &gpuLabels = m_labels[m_frame];
+
+        pTimestamps->clear();
+        pTimestamps->reserve(cpuTimeStamps.size() + gpuLabels.size());
+
+        // copy CPU timestamps
+        //
+        for (uint32_t i = 0; i < cpuTimeStamps.size(); i++)
         {
-            vkCmdResetQueryPool(cmd_buf, m_QueryPool, 0, MaxValuesPerFrame*MaxValuesPerFrame);
-            m_queryNeedsInitialReset = false;
+            pTimestamps->push_back(cpuTimeStamps[i]);
         }
 
-        pTimestamp->clear();
+        // copy GPU timestamps
+        //
+        uint32_t offset = m_frame * MaxValuesPerFrame;
 
-        // timestampPeriod is the number of nanoseconds per timestamp value increment
-        double microsecondsPerTick = (1e-3f * m_pDevice->GetPhysicalDeviceProperries().limits.timestampPeriod);
-
-        uint32_t measurements = (uint32_t)m_labels[m_frame].size();
-        uint32_t offset = m_frame*MaxValuesPerFrame;
-
-        UINT64 TimingsInTicks[256] = {};
-
+        uint32_t measurements = (uint32_t)gpuLabels.size();
         if (measurements > 0)
         {
-            vkGetQueryPoolResults(m_pDevice->GetDevice(), m_QueryPool, offset, measurements, sizeof(TimingsInTicks) * sizeof(UINT64), &TimingsInTicks, sizeof(UINT64), VK_QUERY_RESULT_64_BIT);
-        }
-        vkCmdResetQueryPool(cmd_buf, m_QueryPool, offset, measurements);
+            // timestampPeriod is the number of nanoseconds per timestamp value increment
+            double microsecondsPerTick = (1e-3f * m_pDevice->GetPhysicalDeviceProperries().limits.timestampPeriod);            
+            {
+                UINT64 TimingsInTicks[256] = {};
+                VkResult res = vkGetQueryPoolResults(m_pDevice->GetDevice(), m_QueryPool, offset, measurements, measurements * sizeof(UINT64), &TimingsInTicks, sizeof(UINT64), VK_QUERY_RESULT_64_BIT);                
+                if (res == VK_SUCCESS)
+                {
+                    for (uint32_t i = 1; i < measurements; i++)
+                    {
+                        TimeStamp ts = { m_labels[m_frame][i], float(microsecondsPerTick * (double)(TimingsInTicks[i] - TimingsInTicks[i - 1])) };
+                        pTimestamps->push_back(ts);
+                    }
 
-        for (uint32_t i = 0; i < measurements; i++)
-        {
-            TimeStamp ts = { m_labels[m_frame][i], float(microsecondsPerTick * (double)(TimingsInTicks[i] - TimingsInTicks[0])) };
-            pTimestamp->push_back(ts);
+                    // compute total
+                    TimeStamp ts = { "Total GPU Time", float(microsecondsPerTick * (double)(TimingsInTicks[measurements - 1] - TimingsInTicks[0])) };
+                    pTimestamps->push_back(ts);
+                }
+                else
+                {
+                    pTimestamps->push_back({ "GPU counters are invalid", 0.0f });
+                }
+            }
         }
 
-        m_labels[m_frame].clear();
+        vkCmdResetQueryPool(cmd_buf, m_QueryPool, offset, MaxValuesPerFrame);
+
+        // we always need to clear these ones
+        cpuTimeStamps.clear();
+        gpuLabels.clear();
 
         GetTimeStamp(cmd_buf, "Begin Frame");
     }

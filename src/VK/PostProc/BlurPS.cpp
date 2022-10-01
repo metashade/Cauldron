@@ -1,4 +1,4 @@
-// AMD AMDUtils code
+// AMD Cauldron code
 // 
 // Copyright(c) 2018 Advanced Micro Devices, Inc.All rights reserved.
 // Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -20,10 +20,11 @@
 #include "stdafx.h"
 #include "Base/DynamicBufferRing.h"
 #include "Base/StaticBufferPool.h"
-#include "Base/ExtDebugMarkers.h"
+#include "Base/ExtDebugUtils.h"
 #include "Base/UploadHeap.h"
 #include "Base/Texture.h"
 #include "Base/Helper.h"
+#include "Base/ExtDebugUtils.h"
 #include "PostProcPS.h"
 #include "BlurPS.h"
 
@@ -93,7 +94,7 @@ namespace CAULDRON_VK
 
         // Use helper class to create the fullscreen pass 
         //
-        m_directionalBlur.OnCreate(pDevice, m_in, "blur.glsl", pStaticBufferPool, pConstantBufferRing, m_descriptorSetLayout);
+        m_directionalBlur.OnCreate(pDevice, m_in, "blur.glsl", "main", "", pStaticBufferPool, pConstantBufferRing, m_descriptorSetLayout);
 
         // Allocate descriptors for the mip chain
         //
@@ -115,6 +116,8 @@ namespace CAULDRON_VK
         m_Width = Width;
         m_Height = Height;
         m_mipCount = mipCount;
+
+        m_inputTexture = pInput;
 
         // Create a temporary texture to hold the horizontal pass (only now we know the size of the render target we want to downsample, hence we create the temporary render target here)
         //
@@ -164,6 +167,8 @@ namespace CAULDRON_VK
                     fb_info.layers = 1;
                     VkResult res = vkCreateFramebuffer(m_pDevice->GetDevice(), &fb_info, NULL, &m_horizontalMip[i].m_frameBuffer);
                     assert(res == VK_SUCCESS);
+
+                    SetResourceName(m_pDevice->GetDevice(), VK_OBJECT_TYPE_FRAMEBUFFER, (uint64_t)m_horizontalMip[i].m_frameBuffer, "BlurPSHorizontal");
                 }
 
                 // Create Descriptor sets (all of them use the same Descriptor Layout)            
@@ -191,6 +196,8 @@ namespace CAULDRON_VK
                     fb_info.layers = 1;
                     VkResult res = vkCreateFramebuffer(m_pDevice->GetDevice(), &fb_info, NULL, &m_verticalMip[i].m_frameBuffer);
                     assert(res == VK_SUCCESS);
+
+                    SetResourceName(m_pDevice->GetDevice(), VK_OBJECT_TYPE_FRAMEBUFFER, (uint64_t)m_verticalMip[i].m_frameBuffer, "BlurPSVertical");
                 }
 
                 // create and update descriptor
@@ -206,13 +213,17 @@ namespace CAULDRON_VK
         //
         for (int i = 0; i < m_mipCount; i++)
         {
-            vkDestroyImageView(m_pDevice->GetDevice(), m_horizontalMip[i].m_SRV, NULL);
-            vkDestroyImageView(m_pDevice->GetDevice(), m_horizontalMip[i].m_RTV, NULL);
-            vkDestroyFramebuffer(m_pDevice->GetDevice(), m_horizontalMip[i].m_frameBuffer, NULL);
+            if (m_horizontalMip[i].m_SRV != nullptr)
+            {
+                vkDestroyImageView(m_pDevice->GetDevice(), m_horizontalMip[i].m_SRV, NULL);
+                vkDestroyImageView(m_pDevice->GetDevice(), m_horizontalMip[i].m_RTV, NULL);
+                vkDestroyFramebuffer(m_pDevice->GetDevice(), m_horizontalMip[i].m_frameBuffer, NULL);
 
-            vkDestroyImageView(m_pDevice->GetDevice(), m_verticalMip[i].m_SRV, NULL);
-            vkDestroyImageView(m_pDevice->GetDevice(), m_verticalMip[i].m_RTV, NULL);
-            vkDestroyFramebuffer(m_pDevice->GetDevice(), m_verticalMip[i].m_frameBuffer, NULL);
+                vkDestroyImageView(m_pDevice->GetDevice(), m_verticalMip[i].m_SRV, NULL);
+                vkDestroyImageView(m_pDevice->GetDevice(), m_verticalMip[i].m_RTV, NULL);
+                vkDestroyFramebuffer(m_pDevice->GetDevice(), m_verticalMip[i].m_frameBuffer, NULL);
+                m_horizontalMip[i].m_SRV = {};
+            }
         }
 
         // Destroy temporary render target used to hold the horizontal pass
@@ -263,9 +274,34 @@ namespace CAULDRON_VK
             data->dirX = 1.0f / (float)(m_Width >> mipLevel);
             data->dirY = 0.0f / (float)(m_Height >> mipLevel);
             data->mipLevel = mipLevel;
-            m_directionalBlur.Draw(cmd_buf, constantBuffer, m_horizontalMip[mipLevel].m_descriptorSet);
+            m_directionalBlur.Draw(cmd_buf, &constantBuffer, m_horizontalMip[mipLevel].m_descriptorSet);
 
             vkCmdEndRenderPass(cmd_buf);
+        }
+
+        // Memory barrier to transition input texture layout from shader read to render target
+        // Note the miplevel
+        //
+        {
+            VkImageMemoryBarrier barrier[1] = {};
+
+            // transition input to render target
+            barrier[0].sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+            barrier[0].pNext = nullptr;
+            barrier[0].srcAccessMask = 0;
+            barrier[0].dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+            barrier[0].oldLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+            barrier[0].newLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+            barrier[0].srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+            barrier[0].dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+            barrier[0].image = m_inputTexture->Resource();
+            barrier[0].subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+            barrier[0].subresourceRange.baseMipLevel = mipLevel;
+            barrier[0].subresourceRange.levelCount = 1;
+            barrier[0].subresourceRange.baseArrayLayer = 0;
+            barrier[0].subresourceRange.layerCount = 1;
+
+            vkCmdPipelineBarrier(cmd_buf, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, 0, 0, NULL, 0, NULL, 1, barrier);
         }
 
         // vertical pass
@@ -290,7 +326,7 @@ namespace CAULDRON_VK
             data->dirX = 0.0f / (float)(m_Width >> mipLevel);
             data->dirY = 1.0f / (float)(m_Height >> mipLevel);
             data->mipLevel = mipLevel;
-            m_directionalBlur.Draw(cmd_buf, constantBuffer, m_verticalMip[mipLevel].m_descriptorSet);
+            m_directionalBlur.Draw(cmd_buf, &constantBuffer, m_verticalMip[mipLevel].m_descriptorSet);
 
             vkCmdEndRenderPass(cmd_buf);
         }

@@ -1,6 +1,6 @@
 // AMD Cauldron code
 // 
-// Copyright(c) 2018 Advanced Micro Devices, Inc.All rights reserved.
+// Copyright(c) 2020 Advanced Micro Devices, Inc.All rights reserved.
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files(the "Software"), to deal
 // in the Software without restriction, including without limitation the rights
@@ -19,7 +19,7 @@
 
 
 //--------------------------------------------------------------------------------------
-// Timothy Lottes tone mapper
+// AMD Tonemapper
 //--------------------------------------------------------------------------------------
 // General tonemapping operator, build 'b' term.
 float ColToneB(float hdrMax, float contrast, float shoulder, float midIn, float midOut) 
@@ -45,7 +45,7 @@ float ColTone(float x, float4 p)
     return z / (pow(z, p.g)*p.b + p.a); 
 }
 
-float3 TimothyTonemapper(float3 color)
+float3 AMDTonemapper(float3 color)
 {
     static float hdrMax = 16.0; // How much HDR range before clipping. HDR modes likely need this pushed up to say 25.0.
     static float contrast = 2.0; // Use as a baseline to tune the amount of contrast the tonemapper has.
@@ -138,4 +138,3 @@ float3 ACESFilm(float3 x)
     float e = 0.14f;
     return saturate((x*(a*x + b)) / (x*(c*x + d) + e));
 }
-

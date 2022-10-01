@@ -1,4 +1,4 @@
-// AMD AMDUtils code
+// AMD Cauldron code
 // 
 // Copyright(c) 2018 Advanced Micro Devices, Inc.All rights reserved.
 // Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -46,6 +46,7 @@ namespace CAULDRON_VK
         {
             VkCommandPool        m_commandPool;
             VkCommandBuffer      *m_pCommandBuffer;
+            VkFence              m_cmdBufExecutedFences;
             uint32_t m_UsedCls;
         } *m_pCommandBuffers, *m_pCurrentFrame;
 

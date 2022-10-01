@@ -1,4 +1,4 @@
-// AMD AMDUtils code
+// AMD Cauldron code
 // 
 // Copyright(c) 2018 Advanced Micro Devices, Inc.All rights reserved.
 // Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -34,6 +34,8 @@ public:
         VkResult Init();
         bool AddInstanceLayerName(const char *instanceLayerName);
         bool AddInstanceExtensionName(const char *instanceExtensionName);
+        void *GetNext() { return m_pNext; }
+        void SetNewNext(void *pNext) { m_pNext = pNext; }
 
         void GetExtensionNamesAndConfigs(std::vector<const char *> *pInstance_layer_names, std::vector<const char *> *pInstance_extension_names);
 private:

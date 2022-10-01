@@ -1,4 +1,4 @@
-// AMD AMDUtils code
+// AMD Cauldron code
 // 
 // Copyright(c) 2018 Advanced Micro Devices, Inc.All rights reserved.
 // Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -20,7 +20,7 @@
 #include "stdafx.h"
 #include "Base/DynamicBufferRing.h"
 #include "Base/StaticBufferPool.h"
-#include "Base/ExtDebugMarkers.h"
+#include "Base/ExtDebugUtils.h"
 #include "Base/UploadHeap.h"
 #include "Base/Imgui.h"
 #include "Base/Helper.h"
@@ -75,7 +75,7 @@ namespace CAULDRON_VK
 
         // Create a Render pass that accounts for blending
         //
-        m_blendPass = SimpleColorBlendRenderPass(pDevice->GetDevice(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+        m_blendPass = SimpleColorBlendRenderPass(pDevice->GetDevice(), m_outFormat, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 
         //blending add
         {
@@ -102,7 +102,7 @@ namespace CAULDRON_VK
             cb.blendConstants[2] = 1.0f;
             cb.blendConstants[3] = 1.0f;
 
-            m_blendAdd.OnCreate(pDevice, m_blendPass, "blend.glsl", pStaticBufferPool, pConstantBufferRing, m_descriptorSetLayout, &cb);
+            m_blendAdd.OnCreate(pDevice, m_blendPass, "blend.glsl", "main", "", pStaticBufferPool, pConstantBufferRing, m_descriptorSetLayout, &cb);
         }
 
         {
@@ -165,6 +165,8 @@ namespace CAULDRON_VK
                 fb_info.layers = 1;
                 VkResult res = vkCreateFramebuffer(m_pDevice->GetDevice(), &fb_info, NULL, &m_mip[i].m_frameBuffer);
                 assert(res == VK_SUCCESS);
+
+                SetResourceName(m_pDevice->GetDevice(), VK_OBJECT_TYPE_FRAMEBUFFER, (uint64_t)m_mip[i].m_frameBuffer, "BloomBlended");
             }
 
             // Set descriptors        
@@ -192,6 +194,8 @@ namespace CAULDRON_VK
                 fb_info.layers = 1;
                 VkResult res = vkCreateFramebuffer(m_pDevice->GetDevice(), &fb_info, NULL, &m_output.m_frameBuffer);
                 assert(res == VK_SUCCESS);
+
+                SetResourceName(m_pDevice->GetDevice(), VK_OBJECT_TYPE_FRAMEBUFFER, (uint64_t)m_output.m_frameBuffer, "BloomOutput");
             }
 
             // Set descriptors        
@@ -222,13 +226,32 @@ namespace CAULDRON_VK
 
         for (int i = 0; i < m_mipCount; i++)
         {
-            vkDestroyImageView(m_pDevice->GetDevice(), m_mip[i].m_SRV, NULL);
-            vkDestroyImageView(m_pDevice->GetDevice(), m_mip[i].m_RTV, NULL);
-            vkDestroyFramebuffer(m_pDevice->GetDevice(), m_mip[i].m_frameBuffer, NULL);
+            if (m_mip[i].m_SRV != nullptr)
+            {
+                vkDestroyImageView(m_pDevice->GetDevice(), m_mip[i].m_SRV, NULL);
+                m_mip[i].m_SRV = {};
+            }
+            if (m_mip[i].m_RTV != nullptr)
+            {
+                vkDestroyImageView(m_pDevice->GetDevice(), m_mip[i].m_RTV, NULL);
+                m_mip[i].m_RTV = {};
+            }
+            if (m_mip[i].m_frameBuffer != nullptr)
+            {
+                vkDestroyFramebuffer(m_pDevice->GetDevice(), m_mip[i].m_frameBuffer, NULL);
+                m_mip[i].m_frameBuffer = {};
+            }
         }
-
-        vkDestroyImageView(m_pDevice->GetDevice(), m_output.m_RTV, NULL);
-        vkDestroyFramebuffer(m_pDevice->GetDevice(), m_output.m_frameBuffer, NULL);
+        if (m_output.m_RTV != nullptr)
+        {
+            vkDestroyImageView(m_pDevice->GetDevice(), m_output.m_RTV, NULL);
+            m_output.m_RTV = {};
+        }
+        if (m_output.m_frameBuffer != nullptr)
+        {
+            vkDestroyFramebuffer(m_pDevice->GetDevice(), m_output.m_frameBuffer, NULL);
+            m_output.m_frameBuffer = {};
+        }
     }
 
     void Bloom::OnDestroy()
@@ -274,6 +297,9 @@ namespace CAULDRON_VK
             if (m_doBlur)
             {                
                 m_blur.Draw(cmd_buf, i);
+                // force wait for the draw to completely finish
+                // TODO: need to find a better way to do it
+                vkCmdPipelineBarrier(cmd_buf, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, 0, 0, NULL, 0, NULL, 0, NULL);
             }
 
             // blend with mip above   
@@ -330,7 +356,7 @@ namespace CAULDRON_VK
             }
 
             if (m_doUpscale)
-                m_blendAdd.Draw(cmd_buf, constantBuffer, m_mip[i].m_descriptorSet);
+                m_blendAdd.Draw(cmd_buf, &constantBuffer, m_mip[i].m_descriptorSet);
 
             vkCmdEndRenderPass(cmd_buf);
             SetPerfMarkerEnd(cmd_buf);

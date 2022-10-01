@@ -1,6 +1,6 @@
-// AMD AMDUtils code
+// AMD Cauldron code
 // 
-// Copyright(c) 2018 Advanced Micro Devices, Inc.All rights reserved.
+// Copyright(c) 2020 Advanced Micro Devices, Inc.All rights reserved.
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files(the "Software"), to deal
 // in the Software without restriction, including without limitation the rights
@@ -36,20 +36,20 @@ namespace CAULDRON_DX12
             DynamicBufferRing *pDynamicBufferRing,
             StaticBufferPool *pStaticBufferPool)
         {
-            std::vector<short> indices;
+            std::vector<unsigned short> indices;
             std::vector<float> vertices;
 
             GenerateBox(indices, vertices);
 
             // set indices
             m_NumIndices = (uint32_t)indices.size();
-            pStaticBufferPool->AllocIndexBuffer(m_NumIndices, sizeof(short), indices.data(), &m_IBV);
+            pStaticBufferPool->AllocIndexBuffer(m_NumIndices, sizeof(unsigned short), indices.data(), &m_IBV);
             pStaticBufferPool->AllocVertexBuffer((uint32_t)(vertices.size() / 3), 3 * sizeof(float), vertices.data(), &m_VBV);
         }
 
         void OnDestroy() {}
 
-        void Draw(ID3D12GraphicsCommandList* pCommandList, Wireframe *pWireframe, XMMATRIX worldMatrix, XMVECTOR vCenter, XMVECTOR vRadius, XMVECTOR vColor)
+        void Draw(ID3D12GraphicsCommandList* pCommandList, Wireframe *pWireframe, const math::Matrix4& worldMatrix, const math::Vector4& vCenter, const math::Vector4& vRadius, const math::Vector4& vColor)
         {
             pWireframe->Draw(pCommandList, m_NumIndices, m_IBV, m_VBV, worldMatrix, vCenter, vRadius, vColor);
         }
