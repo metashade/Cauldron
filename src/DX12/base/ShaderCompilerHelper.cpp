@@ -137,8 +137,7 @@ namespace CAULDRON_DX12
         const std::filesystem::path& filePath,
         const DefineList* pDefines,
         const char* pEntryPoint,
-        const char* pTarget,
-        UINT Flags,
+        const char* pParams,
         D3D12_SHADER_BYTECODE* pOutBytecode)
     {
         char* pShaderCode = nullptr;
@@ -146,7 +145,7 @@ namespace CAULDRON_DX12
 
         if (ReadFile(filePath.u8string().c_str(), &pShaderCode, &size, false))
         {
-            return CompileShaderFromString(pShaderCode, pDefines, pEntryPoint, pTarget, Flags, 0, pOutBytecode);
+            return CompileShaderFromString(pShaderCode, pDefines, pEntryPoint, 0, pOutBytecode);
         }
 
         return false;

@@ -93,7 +93,7 @@ namespace CAULDRON_DX12
         void OnUpdateWindowSizeDependentResources(Texture *pSSAO);
         void BuildBatchLists(std::vector<BatchList> *pSolid, std::vector<BatchList> *pTransparent, bool bWireframe = false);
         void DrawBatchList(ID3D12GraphicsCommandList *pCommandList, CBV_SRV_UAV *pShadowBufferSRV, std::vector<BatchList> *pBatchList, bool bWireframe = false);
-    private:
+    protected:
         Device                  *m_pDevice;
         GBufferRenderPass       *m_pGBufferRenderPass;
 
@@ -123,9 +123,8 @@ namespace CAULDRON_DX12
         void CreateRootSignature(bool bUsingSkinning, DefineList &defines, PBRPrimitives *pPrimitive, bool bUseSSAOMask);
         
         virtual void CreatePipeline(
-            std::vector<std::string> semanticName,
             std::vector<D3D12_INPUT_ELEMENT_DESC> layout,
-            DefineList *pAttributeDefines,
+            const DefineList& defines,
             PBRPrimitives*,
             const std::string& strMeshName,
             uint32_t iPrimitive
@@ -142,10 +141,8 @@ namespace CAULDRON_DX12
 
     private:
         void CreatePipeline(
-            ID3D12Device*,
-            std::vector<std::string> semanticName,
             std::vector<D3D12_INPUT_ELEMENT_DESC> layout,
-            DefineList* pAttributeDefines,
+            const DefineList& defines,
             PBRPrimitives*,
             const std::string& strMeshName,
             uint32_t iPrimitive

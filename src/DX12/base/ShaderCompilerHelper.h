@@ -58,7 +58,6 @@ namespace CAULDRON_DX12
         const std::filesystem::path&,
         const DefineList* pMacro,
         const char* pEntryPoint,
-        const char* pTarget,
-        UINT Flags,
+        const char* pParams,
         D3D12_SHADER_BYTECODE* pOutBytecode);
 }

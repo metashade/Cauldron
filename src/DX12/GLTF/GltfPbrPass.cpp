@@ -102,18 +102,23 @@ namespace CAULDRON_DX12
             m_meshes.resize(meshes.size());
             for (uint32_t iMesh = 0; iMesh < meshes.size(); iMesh++)
             {
+                // Loop through all the primitives (sets of triangles with a same material) and 
+                // 1) create an input layout for the geometry
+                // 2) then take its material and create a Root descriptor
+                // 3) With all the above, create a pipeline
+                //
                 PBRMesh *tfmesh = &m_meshes[iMesh];
-                const json::array_t &primitives = meshes[iMesh]["primitives"];
+                const json &primitives = meshes[iMesh]["primitives"];
                 const std::string strMeshName = meshes[iMesh]["name"].get<std::string>();
 
                 tfmesh->m_pPrimitives.resize(primitives.size());
 
                 for (uint32_t iPrimitive = 0; iPrimitive < primitives.size(); iPrimitive++)
                 {
-                    json::object_t primitive = primitives[iPrimitive];
+                    const json &primitive = primitives[iPrimitive];
                     PBRPrimitives *pPrimitive = &tfmesh->m_pPrimitives[iPrimitive];
 
-                    ExecAsyncIfThereIsAPool(pAsyncPool, [this, i, &primitive, rtDefines, pPrimitive, bUseSSAOMask]()
+                    ExecAsyncIfThereIsAPool(pAsyncPool, [this, iMesh, iPrimitive, &strMeshName, &primitive, rtDefines, pPrimitive, bUseSSAOMask]()
                     {
                         // Sets primitive's material, or set a default material if none was specified in the GLTF
                         //
@@ -142,9 +147,8 @@ namespace CAULDRON_DX12
                         bool bUsingSkinning = m_pGLTFTexturesAndBuffers->m_pGLTFCommon->FindMeshSkinId(iMesh) != -1;
                         CreateRootSignature(bUsingSkinning, defines, pPrimitive, bUseSSAOMask);
                         CreatePipeline(
-                            semanticNames,
-                            layout,
-                            &attributeDefines,
+                            inputLayout,
+                            defines,
                             pPrimitive,
                             strMeshName,
                             iPrimitive
@@ -372,9 +376,8 @@ namespace CAULDRON_DX12
     //
     //--------------------------------------------------------------------------------------
     void GltfPbrPass::CreatePipeline(
-        std::vector<std::string> semanticNames,
         std::vector<D3D12_INPUT_ELEMENT_DESC> layout,
-        DefineList *pAttributeDefines,
+        const DefineList &defines,
         PBRPrimitives *pPrimitive,
         const std::string& /*strMeshName*/,
         uint32_t /*iPrimitive*/
@@ -602,10 +605,8 @@ namespace CAULDRON_DX12
     }
 
     void MetashadeGltfPbrPass::CreatePipeline(
-        ID3D12Device* pDevice,
-        std::vector<std::string> /*semanticNames*/,
         std::vector<D3D12_INPUT_ELEMENT_DESC> layout,
-        DefineList* pAttributeDefines,
+        const DefineList& defines,
         PBRPrimitives* pPrimitive,
         const std::string& strMeshName,
         uint32_t iPrimitive)
@@ -627,57 +628,94 @@ namespace CAULDRON_DX12
                 m_metashadeOutDir / fileName("VS"),
                 &defines,
                 "mainVS",
-                "vs_5_0",
-                0,
+                "-T vs_6_0 -Zi -Od",
                 &shaderVert
             );
             CompileShaderFromFile(
                 m_metashadeOutDir / fileName("PS"),
                 &defines,
                 "mainPS",
-                "ps_5_0",
-                0,
+                "-T ps_6_0 -Zi -Od",
                 &shaderPixel
             );
         }
 
-        // Set blending
-        //
-        CD3DX12_BLEND_DESC blendState = CD3DX12_BLEND_DESC(D3D12_DEFAULT);
-        blendState.RenderTarget[0] = D3D12_RENDER_TARGET_BLEND_DESC
-        {
-            (pPrimitive->m_pMaterial->m_pbrMaterialParameters.m_defines.Has("DEF_alphaMode_BLEND")),
-            FALSE,
-            D3D12_BLEND_SRC_ALPHA, D3D12_BLEND_INV_SRC_ALPHA, D3D12_BLEND_OP_ADD,
-            D3D12_BLEND_ONE, D3D12_BLEND_ZERO, D3D12_BLEND_OP_ADD,
-            D3D12_LOGIC_OP_NOOP,
-            D3D12_COLOR_WRITE_ENABLE_ALL,
-        };
+		// Set blending
+		//
+		int upscaleReactiveRT = m_pGBufferRenderPass->GetRtIndex(GBUFFER_UPSCALEREACTIVE);
+		int upscaleTransparencyAndCompositionRT = m_pGBufferRenderPass->GetRtIndex(GBUFFER_UPSCALE_TRANSPARENCY_AND_COMPOSITION);
+		CD3DX12_BLEND_DESC blendState = CD3DX12_BLEND_DESC(D3D12_DEFAULT);
+		blendState.IndependentBlendEnable = (upscaleReactiveRT != -1);
+		for (int i = 0; i < this->m_outFormats.size(); ++i)
+		{
+			blendState.RenderTarget[i] = D3D12_RENDER_TARGET_BLEND_DESC
+			{
+				(defines.Has("DEF_alphaMode_BLEND")),
+				FALSE,
+				D3D12_BLEND_SRC_ALPHA, D3D12_BLEND_INV_SRC_ALPHA, D3D12_BLEND_OP_ADD,
+				D3D12_BLEND_ONE, D3D12_BLEND_ZERO, D3D12_BLEND_OP_ADD,
+				D3D12_LOGIC_OP_NOOP,
+				D3D12_COLOR_WRITE_ENABLE_ALL,
+			};
+			if (i == upscaleReactiveRT || i == upscaleTransparencyAndCompositionRT)
+			{
+				true,
+					blendState.RenderTarget[i].SrcBlend = defines.Has("DEF_alphaMode_BLEND") ? D3D12_BLEND_INV_DEST_COLOR : D3D12_BLEND_ONE;
+				blendState.RenderTarget[i].DestBlend = D3D12_BLEND_ONE;
+				blendState.RenderTarget[i].RenderTargetWriteMask = defines.Has("DEF_alphaMode_BLEND") ? D3D12_COLOR_WRITE_ENABLE_RED : D3D12_COLOR_WRITE_ENABLE_ALPHA;
 
-        /////////////////////////////////////////////
-        // Create a PSO description
+				bool bHasAnimatedTexture = false;
+				bHasAnimatedTexture |= defines.Has("HAS_NORMAL_UV_TRANSFORM");
+				bHasAnimatedTexture |= defines.Has("HAS_EMISSIVE_UV_TRANSFORM");
+				bHasAnimatedTexture |= defines.Has("HAS_OCCLSION_UV_TRANSFORM");
+				bHasAnimatedTexture |= defines.Has("HAS_BASECOLOR_UV_TRANSFORM");
+				bHasAnimatedTexture |= defines.Has("HAS_METALLICROUGHNESS_UV_TRANSFORM");
+				bHasAnimatedTexture |= defines.Has("HAS_SPECULARGLOSSINESS_UV_TRANSFORM");
+				bHasAnimatedTexture |= defines.Has("HAS_DIFFUSE_UV_TRANSFORM");
+				if (bHasAnimatedTexture)
+					blendState.RenderTarget[i].RenderTargetWriteMask |= D3D12_COLOR_WRITE_ENABLE_BLUE;
+			}
+		}
+		// Create a PSO description
+		//
+		D3D12_GRAPHICS_PIPELINE_STATE_DESC descPso = {};
+		descPso.InputLayout = { layout.data(), (UINT)layout.size() };
+		descPso.pRootSignature = pPrimitive->m_RootSignature;
+		descPso.VS = shaderVert;
+		descPso.PS = shaderPixel;
+		descPso.RasterizerState = CD3DX12_RASTERIZER_DESC(D3D12_DEFAULT);
+		descPso.RasterizerState.CullMode = (pPrimitive->m_pMaterial->m_pbrMaterialParameters.m_doubleSided) ? D3D12_CULL_MODE_NONE : D3D12_CULL_MODE_FRONT;
+		descPso.BlendState = blendState;
+		descPso.DepthStencilState = CD3DX12_DEPTH_STENCIL_DESC(D3D12_DEFAULT);
+		if (defines.Has("DEF_alphaMode_BLEND")) {
+			descPso.DepthStencilState.DepthWriteMask = D3D12_DEPTH_WRITE_MASK_ZERO;
+		}
+		else {
+			descPso.DepthStencilState.DepthWriteMask = D3D12_DEPTH_WRITE_MASK_ALL;
+		}
+		descPso.DepthStencilState.DepthFunc = m_bInvertedDepth ? D3D12_COMPARISON_FUNC_GREATER_EQUAL : D3D12_COMPARISON_FUNC_LESS_EQUAL;
+		descPso.SampleMask = UINT_MAX;
+		descPso.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
+		descPso.NumRenderTargets = (UINT)m_outFormats.size();
+		for (size_t i = 0; i < m_outFormats.size(); i++)
+		{
+			descPso.RTVFormats[i] = m_outFormats[i];
+		}
+		descPso.DSVFormat = DXGI_FORMAT_D32_FLOAT;
+		descPso.SampleDesc.Count = m_sampleCount;
+		descPso.NodeMask = 0;
 
-        D3D12_GRAPHICS_PIPELINE_STATE_DESC descPso = {};
-        descPso.InputLayout = { layout.data(), (UINT)layout.size() };
-        descPso.pRootSignature = pPrimitive->m_RootSignature;
-        descPso.VS = shaderVert;
-        descPso.PS = shaderPixel;
-        descPso.RasterizerState = CD3DX12_RASTERIZER_DESC(D3D12_DEFAULT);
-        descPso.RasterizerState.CullMode = (pPrimitive->m_pMaterial->m_pbrMaterialParameters.m_doubleSided) ? D3D12_CULL_MODE_NONE : D3D12_CULL_MODE_FRONT;
-        descPso.BlendState = blendState;
-        descPso.DepthStencilState = CD3DX12_DEPTH_STENCIL_DESC(D3D12_DEFAULT);
-        descPso.DepthStencilState.DepthFunc = D3D12_COMPARISON_FUNC_LESS_EQUAL;
-        descPso.SampleMask = UINT_MAX;
-        descPso.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
-        descPso.NumRenderTargets = 1;
-        descPso.RTVFormats[0] = m_outFormat;
-        descPso.DSVFormat = DXGI_FORMAT_D32_FLOAT;
-        descPso.SampleDesc.Count = m_sampleCount;
-        descPso.NodeMask = 0;
+		ThrowIfFailed(
+			m_pDevice->GetDevice()->CreateGraphicsPipelineState(&descPso, IID_PPV_ARGS(&pPrimitive->m_PipelineRender))
+		);
+		SetName(pPrimitive->m_PipelineRender, "GltfPbrPass::m_PipelineRender");
 
-        ThrowIfFailed(
-            pDevice->CreateGraphicsPipelineState(&descPso, IID_PPV_ARGS(&pPrimitive->m_PipelineRender))
-        );
-        SetName(pPrimitive->m_PipelineRender, "GltfPbrPass::m_PipelineRender");
+		// create wireframe pipeline
+		descPso.RasterizerState.FillMode = D3D12_FILL_MODE_WIREFRAME;
+		descPso.RasterizerState.CullMode = D3D12_CULL_MODE_NONE;
+		ThrowIfFailed(
+			m_pDevice->GetDevice()->CreateGraphicsPipelineState(&descPso, IID_PPV_ARGS(&pPrimitive->m_PipelineWireframeRender))
+		);
+		SetName(pPrimitive->m_PipelineWireframeRender, "GltfPbrPass::m_PipelineWireframeRender");
     }
 }
