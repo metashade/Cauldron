@@ -145,7 +145,7 @@ namespace CAULDRON_DX12
 
         if (ReadFile(filePath.u8string().c_str(), &pShaderCode, &size, false))
         {
-            return CompileShaderFromString(pShaderCode, pDefines, pEntryPoint, 0, pOutBytecode);
+            return CompileShaderFromString(pShaderCode, pDefines, pEntryPoint, pParams, pOutBytecode);
         }
 
         return false;
