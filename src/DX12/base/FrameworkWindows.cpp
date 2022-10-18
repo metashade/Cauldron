@@ -85,7 +85,13 @@ int RunFramework(HINSTANCE hInstance, LPSTR lpCmdLine, int nCmdShow, FrameworkWi
     // Get command line and config file parameters for app run
     uint32_t Width = 1920;
     uint32_t Height = 1080;
-    pFramework->OnParseCommandLine(lpCmdLine, &Width, &Height);
+
+    // Cauldron CLI parsing is temporarily disabled because it's incompatible
+    // with the Metashade demo- see https://github.com/ppenenko/metashade/issues/13
+    pFramework->OnParseCommandLine(
+        "", // lpCmdLine
+        &Width, &Height
+    );
 
     // This makes sure that in a multi-monitor setup with different resolutions, get monitor info returns correct dimensions
     SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
