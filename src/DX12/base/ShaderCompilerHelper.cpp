@@ -143,12 +143,15 @@ namespace CAULDRON_DX12
         char* pShaderCode = nullptr;
         size_t size = 0;
 
+        bool result = false;
         if (ReadFile(filePath.u8string().c_str(), &pShaderCode, &size, false))
         {
-            return CompileShaderFromString(pShaderCode, pDefines, pEntryPoint, pParams, pOutBytecode);
+            result = CompileShaderFromString(pShaderCode, pDefines, pEntryPoint, pParams, pOutBytecode);
+            free(pShaderCode);
         }
 
-        return false;
+        assert(result && "Some of the shaders have not been copied to the bin folder, try rebuilding the solution.");
+        return result;
     }
 
 }

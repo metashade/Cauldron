@@ -118,7 +118,7 @@ namespace CAULDRON_DX12
                     const json &primitive = primitives[iPrimitive];
                     PBRPrimitives *pPrimitive = &tfmesh->m_pPrimitives[iPrimitive];
 
-                    ExecAsyncIfThereIsAPool(pAsyncPool, [this, iMesh, iPrimitive, &strMeshName, &primitive, rtDefines, pPrimitive, bUseSSAOMask]()
+                    ExecAsyncIfThereIsAPool(pAsyncPool, [this, iMesh, iPrimitive, strMeshName, &primitive, rtDefines, pPrimitive, bUseSSAOMask]()
                     {
                         // Sets primitive's material, or set a default material if none was specified in the GLTF
                         //
