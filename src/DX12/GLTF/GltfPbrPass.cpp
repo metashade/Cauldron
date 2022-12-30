@@ -108,8 +108,11 @@ namespace CAULDRON_DX12
                 // 3) With all the above, create a pipeline
                 //
                 PBRMesh *tfmesh = &m_meshes[iMesh];
-                const json &primitives = meshes[iMesh]["primitives"];
-                const std::string strMeshName = meshes[iMesh]["name"].get<std::string>();
+
+                const json &mesh = meshes[iMesh];
+                const json &primitives = mesh["primitives"];
+                const std::string strMeshName = mesh.contains("name") ? mesh["name"].get<std::string>()
+                    : (boost::format("UnnamedMesh%1%") % iMesh).str();
 
                 tfmesh->m_pPrimitives.resize(primitives.size());
 
