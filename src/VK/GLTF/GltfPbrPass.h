@@ -145,7 +145,7 @@ namespace CAULDRON_VK
 
     private:
         void CreatePipeline(
-            std::vector<D3D12_INPUT_ELEMENT_DESC> layout,
+            std::vector<VkVertexInputAttributeDescription> layout,
             const DefineList& defines,
             PBRPrimitives*,
             const std::string& strMeshName,

@@ -163,24 +163,27 @@ namespace CAULDRON_VK
             const json &meshes = j3["meshes"];
 
             m_meshes.resize(meshes.size());
-            for (uint32_t i = 0; i < meshes.size(); i++)
+            for (uint32_t iMesh = 0; iMesh < meshes.size(); iMesh++)
             {
-                const json &primitives = meshes[i]["primitives"];
-
                 // Loop through all the primitives (sets of triangles with a same material) and 
                 // 1) create an input layout for the geometry
                 // 2) then take its material and create a Root descriptor
                 // 3) With all the above, create a pipeline
                 //
-                PBRMesh *tfmesh = &m_meshes[i];
+                const json& mesh = meshes[iMesh];
+                const json& primitives = mesh["primitives"];
+                const std::string strMeshName = mesh.contains("name") ? mesh["name"].get<std::string>()
+                    : (boost::format("UnnamedMesh%1%") % iMesh).str();
+
+                PBRMesh* tfmesh = &m_meshes[iMesh];
                 tfmesh->m_pPrimitives.resize(primitives.size());
 
-                for (uint32_t p = 0; p < primitives.size(); p++)
+                for (uint32_t iPrimitive = 0; iPrimitive < primitives.size(); iPrimitive++)
                 {
-                    const json &primitive = primitives[p];                
-                    PBRPrimitives *pPrimitive = &tfmesh->m_pPrimitives[p];
+                    const json &primitive = primitives[iPrimitive];                
+                    PBRPrimitives *pPrimitive = &tfmesh->m_pPrimitives[iPrimitive];
 
-                    ExecAsyncIfThereIsAPool(pAsyncPool, [this, i, rtDefines, &primitive, pPrimitive, bUseSSAOMask]()
+                    ExecAsyncIfThereIsAPool(pAsyncPool, [this, iMesh, iPrimitive, strMeshName, rtDefines, &primitive, pPrimitive, bUseSSAOMask]()
                     {
                         // Sets primitive's material, or set a default material if none was specified in the GLTF
                         //
@@ -205,10 +208,16 @@ namespace CAULDRON_VK
 
                         // Create descriptors and pipelines
                         //
-                        int skinId = m_pGLTFTexturesAndBuffers->m_pGLTFCommon->FindMeshSkinId(i);
+                        int skinId = m_pGLTFTexturesAndBuffers->m_pGLTFCommon->FindMeshSkinId(iMesh);
                         int inverseMatrixBufferSize = m_pGLTFTexturesAndBuffers->m_pGLTFCommon->GetInverseBindMatricesBufferSizeByID(skinId);
                         CreateDescriptors(inverseMatrixBufferSize, &defines, pPrimitive, bUseSSAOMask);
-                        CreatePipeline(inputLayout, defines, pPrimitive);
+                        CreatePipeline(
+                            inputLayout,
+                            defines,
+                            pPrimitive,
+                            strMeshName,
+                            iPrimitive
+                        );
                     });
                 }
             }
@@ -458,7 +467,13 @@ namespace CAULDRON_VK
     // CreatePipeline
     //
     //--------------------------------------------------------------------------------------
-    void GltfPbrPass::CreatePipeline(std::vector<VkVertexInputAttributeDescription> layout, const DefineList &defines, PBRPrimitives *pPrimitive)
+    void GltfPbrPass::CreatePipeline(
+        std::vector<VkVertexInputAttributeDescription> layout,
+        const DefineList &defines,
+        PBRPrimitives *pPrimitive,
+        const std::string& /*strMeshName*/,
+        uint32_t /*iPrimitive*/
+    )
     {
         // Compile and create shaders
         //
