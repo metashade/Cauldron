@@ -144,13 +144,13 @@ namespace CAULDRON_VK
         {}
 
     private:
-        void CreatePipeline(
+        /*void CreatePipeline(
             std::vector<VkVertexInputAttributeDescription> layout,
             const DefineList& defines,
             PBRPrimitives*,
             const std::string& strMeshName,
             uint32_t iPrimitive
-        ) override;
+        ) override;*/
 
         const std::filesystem::path     m_metashadeOutDir;
     };
