@@ -591,7 +591,7 @@ namespace CAULDRON_DX12
         // bind the per object constant buffer descriptor
         pCommandList->SetGraphicsRootConstantBufferView(paramIndex++, perObjectDesc);
 
-        //// bind the skeleton bind matrices constant buffer descriptor
+        // bind the skeleton bind matrices constant buffer descriptor
         if (pPerSkeleton != 0)
             pCommandList->SetGraphicsRootConstantBufferView(paramIndex++, pPerSkeleton);
 

@@ -38,6 +38,8 @@ using namespace DirectX;
 #include <limits>
 #include <algorithm>
 #include <mutex>
+#include <filesystem>
+#include <boost/format.hpp>
 
 //#include <Shellapi.h> 
 

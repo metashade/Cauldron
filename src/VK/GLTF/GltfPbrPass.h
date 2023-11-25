@@ -60,6 +60,8 @@ namespace CAULDRON_VK
     class GltfPbrPass
     {
     public:
+        virtual ~GltfPbrPass(){}
+        
         struct per_object
         {
             math::Matrix4 mCurrentWorld;
@@ -97,7 +99,7 @@ namespace CAULDRON_VK
         void BuildBatchLists(std::vector<BatchList> *pSolid, std::vector<BatchList> *pTransparent, bool bWireframe=false);
         void DrawBatchList(VkCommandBuffer commandBuffer, std::vector<BatchList> *pBatchList, bool bWireframe=false);
         void OnUpdateWindowSizeDependentResources(VkImageView SSAO);
-    private:
+    protected:
         GLTFTexturesAndBuffers *m_pGLTFTexturesAndBuffers;
 
         ResourceViewHeaps *m_pResourceViewHeaps;
@@ -124,8 +126,32 @@ namespace CAULDRON_VK
 
         void CreateDescriptorTableForMaterialTextures(PBRMaterial *tfmat, std::map<std::string, VkImageView> &texturesBase, SkyDome *pSkyDome, std::vector<VkImageView>& ShadowMapViewPool, bool bUseSSAOMask);
         void CreateDescriptors(int inverseMatrixBufferSize, DefineList *pAttributeDefines, PBRPrimitives *pPrimitive, bool bUseSSAOMask);
-        void CreatePipeline(std::vector<VkVertexInputAttributeDescription> layout, const DefineList &defines, PBRPrimitives *pPrimitive);
+        virtual void CreatePipeline(
+            std::vector<VkVertexInputAttributeDescription> layout,
+            const DefineList &defines,
+            PBRPrimitives *pPrimitive,
+            const std::string& strMeshName,
+            uint32_t iPrimitive
+        );
+    };
+
+    class MetashadeGltfPbrPass
+        : public GltfPbrPass
+    {
+    public:
+        MetashadeGltfPbrPass(const std::filesystem::path& metashadeOutDir)
+            : m_metashadeOutDir(metashadeOutDir)
+        {}
+
+    private:
+        /*void CreatePipeline(
+            std::vector<VkVertexInputAttributeDescription> layout,
+            const DefineList& defines,
+            PBRPrimitives*,
+            const std::string& strMeshName,
+            uint32_t iPrimitive
+        ) override;*/
+
+        const std::filesystem::path     m_metashadeOutDir;
     };
 }
-
-
