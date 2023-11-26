@@ -861,4 +861,282 @@ namespace CAULDRON_VK
         //
         vkCmdDrawIndexed(cmd_buf, m_geometry.m_NumIndices, 1, 0, 0, 0);
     }
+
+    //--------------------------------------------------------------------------------------
+    //
+    // CreatePipeline
+    //
+    //--------------------------------------------------------------------------------------
+    void MetashadeGltfPbrPass::CreatePipeline(
+        std::vector<VkVertexInputAttributeDescription> layout,
+        const DefineList &defines,
+        PBRPrimitives *pPrimitive,
+        const std::string& /*strMeshName*/,
+        uint32_t /*iPrimitive*/
+    )
+    {
+        // Compile and create shaders
+        //
+        VkPipelineShaderStageCreateInfo vertexShader = {}, fragmentShader = {};
+        VKCompileFromFile(m_pDevice->GetDevice(), VK_SHADER_STAGE_VERTEX_BIT, "GLTFPbrPass-vert.glsl", "main", "", &defines, &vertexShader);
+        VKCompileFromFile(m_pDevice->GetDevice(), VK_SHADER_STAGE_FRAGMENT_BIT, "GLTFPbrPass-frag.glsl", "main", "", &defines, &fragmentShader);
+
+        std::vector<VkPipelineShaderStageCreateInfo> shaderStages = { vertexShader, fragmentShader };
+
+        // Create pipeline
+        //
+
+        // vertex input state
+
+        std::vector<VkVertexInputBindingDescription> vi_binding(layout.size());
+        for (int i = 0; i < layout.size(); i++)
+        {
+            vi_binding[i].binding = layout[i].binding;
+            vi_binding[i].stride = SizeOfFormat(layout[i].format);
+            vi_binding[i].inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
+        }
+
+        VkPipelineVertexInputStateCreateInfo vi = {};
+        vi.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
+        vi.pNext = NULL;
+        vi.flags = 0;
+        vi.vertexBindingDescriptionCount = (uint32_t)vi_binding.size();
+        vi.pVertexBindingDescriptions = vi_binding.data();
+        vi.vertexAttributeDescriptionCount = (uint32_t)layout.size();
+        vi.pVertexAttributeDescriptions = layout.data();
+
+        // input assembly state
+
+        VkPipelineInputAssemblyStateCreateInfo ia;
+        ia.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
+        ia.pNext = NULL;
+        ia.flags = 0;
+        ia.primitiveRestartEnable = VK_FALSE;
+        ia.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+
+        // rasterizer state
+
+        VkPipelineRasterizationStateCreateInfo rs;
+        rs.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
+        rs.pNext = NULL;
+        rs.flags = 0;
+        rs.polygonMode = VK_POLYGON_MODE_FILL;
+        rs.cullMode = pPrimitive->m_pMaterial->m_pbrMaterialParameters.m_doubleSided ? VK_CULL_MODE_NONE : VK_CULL_MODE_BACK_BIT;
+        rs.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
+        rs.depthClampEnable = VK_FALSE;
+        rs.rasterizerDiscardEnable = VK_FALSE;
+        rs.depthBiasEnable = VK_FALSE;
+        rs.depthBiasConstantFactor = 0;
+        rs.depthBiasClamp = 0;
+        rs.depthBiasSlopeFactor = 0;
+        rs.lineWidth = 1.0f;
+
+
+        std::vector<VkPipelineColorBlendAttachmentState> att_states;
+        if (defines.Has("HAS_FORWARD_RT"))
+        {
+            VkPipelineColorBlendAttachmentState att_state = {};
+            att_state.colorWriteMask = 0xf;
+            att_state.blendEnable = (defines.Has("DEF_alphaMode_BLEND"));
+            att_state.colorBlendOp = VK_BLEND_OP_ADD;
+            att_state.srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;
+            att_state.dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
+            att_state.alphaBlendOp = VK_BLEND_OP_ADD;
+            att_state.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
+            att_state.dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO;
+            att_states.push_back(att_state);
+        }
+        if (defines.Has("HAS_SPECULAR_ROUGHNESS_RT"))
+        {
+            VkPipelineColorBlendAttachmentState att_state = {};
+            att_state.colorWriteMask = 0xf;
+            att_state.blendEnable = defines.Has("DEF_alphaMode_BLEND");
+            att_state.alphaBlendOp = VK_BLEND_OP_ADD;
+            att_state.colorBlendOp = VK_BLEND_OP_ADD;
+            att_state.srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;
+            att_state.dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
+            att_state.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
+            att_state.dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO;
+            att_states.push_back(att_state);
+        }
+        if (defines.Has("HAS_DIFFUSE_RT"))
+        {
+            VkPipelineColorBlendAttachmentState att_state = {};
+            att_state.colorWriteMask = 0xf;
+            att_state.blendEnable = defines.Has("DEF_alphaMode_BLEND");
+            att_state.alphaBlendOp = VK_BLEND_OP_ADD;
+            att_state.colorBlendOp = VK_BLEND_OP_ADD;
+            att_state.srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;
+            att_state.dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
+            att_state.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
+            att_state.dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO;
+            att_states.push_back(att_state);
+        }
+        if (defines.Has("HAS_NORMALS_RT"))
+        {
+            VkPipelineColorBlendAttachmentState att_state = {};
+            att_state.colorWriteMask = 0xf;
+            att_state.blendEnable = defines.Has("DEF_alphaMode_BLEND");
+            att_state.alphaBlendOp = VK_BLEND_OP_ADD;
+            att_state.colorBlendOp = VK_BLEND_OP_ADD;
+            att_state.srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;
+            att_state.dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
+            att_state.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
+            att_state.dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO;
+            att_states.push_back(att_state);
+        }
+        if (defines.Has("HAS_MOTION_VECTORS_RT"))
+        {
+            VkPipelineColorBlendAttachmentState att_state = {};
+            att_state.colorWriteMask = 0xf;
+            att_state.blendEnable = defines.Has("DEF_alphaMode_BLEND");
+            att_state.alphaBlendOp = VK_BLEND_OP_ADD;
+            att_state.colorBlendOp = VK_BLEND_OP_ADD;
+            att_state.srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;
+            att_state.dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
+            att_state.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
+            att_state.dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO;
+            att_states.push_back(att_state);
+        }
+        {
+            VkPipelineColorBlendAttachmentState att_state = {};
+            att_state.colorWriteMask = defines.Has("DEF_alphaMode_BLEND") ? VK_COLOR_COMPONENT_R_BIT : VK_COLOR_COMPONENT_A_BIT;
+            att_state.blendEnable = defines.Has("DEF_alphaMode_BLEND");
+            att_state.alphaBlendOp = VK_BLEND_OP_ADD;
+            att_state.colorBlendOp = VK_BLEND_OP_ADD;
+            att_state.srcColorBlendFactor = defines.Has("DEF_alphaMode_BLEND") ? VK_BLEND_FACTOR_ONE_MINUS_DST_COLOR : VK_BLEND_FACTOR_ONE;
+            att_state.dstColorBlendFactor = VK_BLEND_FACTOR_ONE;
+            att_state.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
+            att_state.dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO;
+
+            bool bHasAnimatedTexture = false;
+            bHasAnimatedTexture |= defines.Has("HAS_NORMAL_UV_TRANSFORM");
+            bHasAnimatedTexture |= defines.Has("HAS_EMISSIVE_UV_TRANSFORM");
+            bHasAnimatedTexture |= defines.Has("HAS_OCCLSION_UV_TRANSFORM");
+            bHasAnimatedTexture |= defines.Has("HAS_BASECOLOR_UV_TRANSFORM");
+            bHasAnimatedTexture |= defines.Has("HAS_METALLICROUGHNESS_UV_TRANSFORM");
+            bHasAnimatedTexture |= defines.Has("HAS_SPECULARGLOSSINESS_UV_TRANSFORM");
+            bHasAnimatedTexture |= defines.Has("HAS_DIFFUSE_UV_TRANSFORM");
+
+            if (bHasAnimatedTexture)
+                att_state.colorWriteMask |= VK_COLOR_COMPONENT_B_BIT;
+
+            if (defines.Has("HAS_UPSCALE_REACTIVE_RT"))
+                att_states.push_back(att_state);
+
+            if (defines.Has("HAS_UPSCALE_TRANSPARENCY_AND_COMPOSITION_RT"))
+                att_states.push_back(att_state);
+        }
+
+        // Color blend state
+
+        VkPipelineColorBlendStateCreateInfo cb;
+        cb.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
+        cb.flags = 0;
+        cb.pNext = NULL;
+        cb.attachmentCount = static_cast<uint32_t>(att_states.size());
+        cb.pAttachments = att_states.data();
+        cb.logicOpEnable = VK_FALSE;
+        cb.logicOp = VK_LOGIC_OP_NO_OP;
+        cb.blendConstants[0] = 1.0f;
+        cb.blendConstants[1] = 1.0f;
+        cb.blendConstants[2] = 1.0f;
+        cb.blendConstants[3] = 1.0f;
+
+        std::vector<VkDynamicState> dynamicStateEnables = {
+            VK_DYNAMIC_STATE_VIEWPORT,
+            VK_DYNAMIC_STATE_FRAGMENT_SHADING_RATE_KHR,
+            VK_DYNAMIC_STATE_SCISSOR
+        };
+        VkPipelineDynamicStateCreateInfo dynamicState = {};
+        dynamicState.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
+        dynamicState.pNext = NULL;
+        dynamicState.pDynamicStates = dynamicStateEnables.data();
+        dynamicState.dynamicStateCount = (uint32_t)dynamicStateEnables.size();
+
+        // view port state
+
+        VkPipelineViewportStateCreateInfo vp = {};
+        vp.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
+        vp.pNext = NULL;
+        vp.flags = 0;
+        vp.viewportCount = 1;
+        vp.scissorCount = 1;
+        vp.pScissors = NULL;
+        vp.pViewports = NULL;
+
+        // depth stencil state
+
+        VkPipelineDepthStencilStateCreateInfo ds;
+        ds.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
+        ds.pNext = NULL;
+        ds.flags = 0;
+        ds.depthTestEnable = true;
+        if (defines.Has("DEF_alphaMode_BLEND")) {
+            ds.depthWriteEnable = false;
+        }
+        else {
+            ds.depthWriteEnable = true;
+        }
+        ds.depthCompareOp = m_bInvertedDepth ? VK_COMPARE_OP_GREATER_OR_EQUAL : VK_COMPARE_OP_LESS_OR_EQUAL;
+        ds.back.failOp = VK_STENCIL_OP_KEEP;
+        ds.back.passOp = VK_STENCIL_OP_KEEP;
+        ds.back.compareOp = VK_COMPARE_OP_ALWAYS;
+        ds.back.compareMask = 0;
+        ds.back.reference = 0;
+        ds.back.depthFailOp = VK_STENCIL_OP_KEEP;
+        ds.back.writeMask = 0;
+        ds.depthBoundsTestEnable = VK_FALSE;
+        ds.minDepthBounds = 0;
+        ds.maxDepthBounds = 0;
+        ds.stencilTestEnable = VK_FALSE;
+        ds.front = ds.back;
+
+        // multi sample state
+
+        VkPipelineMultisampleStateCreateInfo ms;
+        ms.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
+        ms.pNext = NULL;
+        ms.flags = 0;
+        ms.pSampleMask = NULL;
+        ms.rasterizationSamples = m_pRenderPass->GetSampleCount();
+        ms.sampleShadingEnable = VK_FALSE;
+        ms.alphaToCoverageEnable = VK_FALSE;
+        ms.alphaToOneEnable = VK_FALSE;
+        ms.minSampleShading = 0.0;
+
+        // create pipeline 
+        //
+        VkGraphicsPipelineCreateInfo pipeline = {};
+        pipeline.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
+        pipeline.pNext = NULL;
+        pipeline.layout = pPrimitive->m_pipelineLayout;
+        pipeline.basePipelineHandle = VK_NULL_HANDLE;
+        pipeline.basePipelineIndex = 0;
+        pipeline.flags = 0;
+        pipeline.pVertexInputState = &vi;
+        pipeline.pInputAssemblyState = &ia;
+        pipeline.pRasterizationState = &rs;
+        pipeline.pColorBlendState = &cb;
+        pipeline.pTessellationState = NULL;
+        pipeline.pMultisampleState = &ms;
+        pipeline.pDynamicState = &dynamicState;
+        pipeline.pViewportState = &vp;
+        pipeline.pDepthStencilState = &ds;
+        pipeline.pStages = shaderStages.data();
+        pipeline.stageCount = (uint32_t)shaderStages.size();
+        pipeline.renderPass = m_pRenderPass->GetRenderPass();
+        pipeline.subpass = 0;
+
+        VkResult res = vkCreateGraphicsPipelines(m_pDevice->GetDevice(), m_pDevice->GetPipelineCache(), 1, &pipeline, NULL, &pPrimitive->m_pipeline);
+        assert(res == VK_SUCCESS);
+        SetResourceName(m_pDevice->GetDevice(), VK_OBJECT_TYPE_PIPELINE, (uint64_t)pPrimitive->m_pipeline, "GltfPbrPass P");
+
+        // create wireframe pipeline
+        rs.polygonMode = VK_POLYGON_MODE_LINE;
+        rs.cullMode = VK_CULL_MODE_NONE;
+        res = vkCreateGraphicsPipelines(m_pDevice->GetDevice(), m_pDevice->GetPipelineCache(), 1, &pipeline, NULL, &pPrimitive->m_pipelineWireframe);
+        assert(res == VK_SUCCESS);
+        SetResourceName(m_pDevice->GetDevice(), VK_OBJECT_TYPE_PIPELINE, (uint64_t)pPrimitive->m_pipelineWireframe, "GltfPbrPass Wireframe P");
+    }
 }
