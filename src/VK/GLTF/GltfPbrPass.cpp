@@ -871,15 +871,42 @@ namespace CAULDRON_VK
         std::vector<VkVertexInputAttributeDescription> layout,
         const DefineList &defines,
         PBRPrimitives *pPrimitive,
-        const std::string& /*strMeshName*/,
-        uint32_t /*iPrimitive*/
+        const std::string& strMeshName,
+        uint32_t iPrimitive
     )
     {
         // Compile and create shaders
         //
         VkPipelineShaderStageCreateInfo vertexShader = {}, fragmentShader = {};
-        VKCompileFromFile(m_pDevice->GetDevice(), VK_SHADER_STAGE_VERTEX_BIT, "GLTFPbrPass-vert.glsl", "main", "", &defines, &vertexShader);
-        VKCompileFromFile(m_pDevice->GetDevice(), VK_SHADER_STAGE_FRAGMENT_BIT, "GLTFPbrPass-frag.glsl", "main", "", &defines, &fragmentShader);
+
+        {
+            // Empty defines
+            DefineList defines;
+
+            auto fileName = [&strMeshName, iPrimitive](const char* pszStage) -> std::string
+            {
+                return (boost::format("%1%-%2%-%3%.glsl") % strMeshName % iPrimitive % pszStage).str();
+            };
+
+            VKCompileFromFile(
+                m_pDevice->GetDevice(),
+                VK_SHADER_STAGE_VERTEX_BIT,
+                m_metashadeOutDir / fileName("VS"),
+                "mainVS",
+                "", // compiler args
+                &defines,
+                &vertexShader
+            );
+            VKCompileFromFile(
+                m_pDevice->GetDevice(),
+                VK_SHADER_STAGE_FRAGMENT_BIT,
+                m_metashadeOutDir / fileName("PS"),
+                "mainPS",
+                "", // compiler args
+                &defines,
+                &fragmentShader
+            );
+        }
 
         std::vector<VkPipelineShaderStageCreateInfo> shaderStages = { vertexShader, fragmentShader };
 
