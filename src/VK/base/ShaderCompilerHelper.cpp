@@ -257,6 +257,28 @@ namespace CAULDRON_VK
     }
 
     //
+    // VKCompileFromFile
+    //
+    VkResult VKCompileFromFile(VkDevice device, const VkShaderStageFlagBits shader_type, const std::filesystem::path& filePath, const char* pShaderEntryPoint, const char* shaderCompilerParams, const DefineList* pDefines, VkPipelineShaderStageCreateInfo* pShader)
+    {
+        char* pShaderCode;
+        size_t size;
+
+        constexpr ShaderSourceType sourceType = SST_GLSL;
+        const std::string strFilePath = filePath.u8string();
+
+        if (ReadFile(strFilePath.c_str(), &pShaderCode, &size, false))
+        {
+            VkResult res = VKCompileFromString(device, sourceType, shader_type, pShaderCode, pShaderEntryPoint, shaderCompilerParams, pDefines, pShader);
+            SetResourceName(device, VK_OBJECT_TYPE_SHADER_MODULE, (uint64_t)pShader->module, strFilePath.c_str());
+            free(pShaderCode);
+            return res;
+        }
+
+        return VK_NOT_READY;
+    }
+
+    //
     // Creates the shader cache
     //
     void CreateShaderCache()

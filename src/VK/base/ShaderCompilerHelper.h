@@ -39,4 +39,5 @@ namespace CAULDRON_VK
     // Does as the function name says and uses a cache
     VkResult VKCompileFromString(VkDevice device, ShaderSourceType sourceType, const VkShaderStageFlagBits shader_type, const char *pShaderCode, const char *pShaderEntryPoint, const char *pExtraParams, const DefineList *pDefines, VkPipelineShaderStageCreateInfo *pShader);
     VkResult VKCompileFromFile(VkDevice device, const VkShaderStageFlagBits shader_type, const char *pFilename, const char *pShaderEntryPoint, const char *pExtraParams, const DefineList *pDefines, VkPipelineShaderStageCreateInfo *pShader);
+    VkResult VKCompileFromFile(VkDevice device, const VkShaderStageFlagBits shader_type, const std::filesystem::path& filePath, const char* pShaderEntryPoint, const char* pExtraParams, const DefineList* pDefines, VkPipelineShaderStageCreateInfo* pShader);
 }
