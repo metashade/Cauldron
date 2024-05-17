@@ -892,7 +892,7 @@ namespace CAULDRON_VK
                 m_pDevice->GetDevice(),
                 VK_SHADER_STAGE_VERTEX_BIT,
                 m_metashadeOutDir / fileName("VS"),
-                "mainVS",
+                "main",
                 "", // compiler args
                 &defines,
                 &vertexShader
@@ -901,7 +901,7 @@ namespace CAULDRON_VK
                 m_pDevice->GetDevice(),
                 VK_SHADER_STAGE_FRAGMENT_BIT,
                 m_metashadeOutDir / fileName("PS"),
-                "mainPS",
+                "main",
                 "", // compiler args
                 &defines,
                 &fragmentShader
