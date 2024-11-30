@@ -880,22 +880,23 @@ namespace CAULDRON_VK
         VkPipelineShaderStageCreateInfo vertexShader = {}, fragmentShader = {};
 
         {
-            // Empty defines
-            DefineList defines;
+            VKCompileFromFile(m_pDevice->GetDevice(), VK_SHADER_STAGE_VERTEX_BIT, "GLTFPbrPass-vert.glsl", "main", "", &defines, &vertexShader);
 
             auto fileName = [&strMeshName, iPrimitive](const char* pszStage) -> std::string
             {
                 return (boost::format("%1%-%2%-%3%.glsl") % strMeshName % iPrimitive % pszStage).str();
             };
 
-            VKCompileFromFile(m_pDevice->GetDevice(), VK_SHADER_STAGE_VERTEX_BIT, "GLTFPbrPass-vert.glsl", "main", "", &defines, &vertexShader);
+            // Empty defines
+            DefineList emptyDefines;
+
             VKCompileFromFile(
                 m_pDevice->GetDevice(),
                 VK_SHADER_STAGE_FRAGMENT_BIT,
                 m_metashadeOutDir / fileName("frag"),
                 "main",
                 "", // compiler args
-                &defines,
+                &emptyDefines,
                 &fragmentShader
             );
         }
