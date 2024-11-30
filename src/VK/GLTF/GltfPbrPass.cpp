@@ -888,19 +888,11 @@ namespace CAULDRON_VK
                 return (boost::format("%1%-%2%-%3%.glsl") % strMeshName % iPrimitive % pszStage).str();
             };
 
-            VKCompileFromFile(
-                m_pDevice->GetDevice(),
-                VK_SHADER_STAGE_VERTEX_BIT,
-                m_metashadeOutDir / fileName("VS"),
-                "main",
-                "", // compiler args
-                &defines,
-                &vertexShader
-            );
+            VKCompileFromFile(m_pDevice->GetDevice(), VK_SHADER_STAGE_VERTEX_BIT, "GLTFPbrPass-vert.glsl", "main", "", &defines, &vertexShader);
             VKCompileFromFile(
                 m_pDevice->GetDevice(),
                 VK_SHADER_STAGE_FRAGMENT_BIT,
-                m_metashadeOutDir / fileName("PS"),
+                m_metashadeOutDir / fileName("frag"),
                 "main",
                 "", // compiler args
                 &defines,
