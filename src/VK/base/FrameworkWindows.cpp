@@ -86,7 +86,7 @@ int RunFramework(HINSTANCE hInstance, LPSTR lpCmdLine, int nCmdShow, FrameworkWi
     uint32_t Height = 1080;
     
     // Cauldron CLI parsing is temporarily disabled because it's incompatible
-    // with the Metashade demo- see https://github.com/ppenenko/metashade/issues/13
+    // with the Metashade demo- see https://github.com/metashade/metashade/issues/13
     pFramework->OnParseCommandLine(
         "", // lpCmdLine
         &Width, &Height
