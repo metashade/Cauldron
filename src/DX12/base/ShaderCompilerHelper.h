@@ -60,4 +60,9 @@ namespace CAULDRON_DX12
         const char* pEntryPoint,
         const char* pParams,
         D3D12_SHADER_BYTECODE* pOutBytecode);
+
+    bool LoadPrecompiledDxil(
+        const char* pFilePath,
+        D3D12_SHADER_BYTECODE* pOutBytecode
+    );
 }

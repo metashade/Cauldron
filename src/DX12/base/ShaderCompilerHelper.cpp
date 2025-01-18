@@ -56,6 +56,37 @@ namespace CAULDRON_DX12
         DestroyShadersInTheCache();
     }
 
+    bool LoadPrecompiledDxil(const char* pFilePath, D3D12_SHADER_BYTECODE* pOutBytecode)
+    {
+        size_t hash = 2166136261;
+        hash = Hash(pFilePath, strlen(pFilePath), hash);
+
+#ifdef USE_MULTITHREADED_CACHE
+        // Compile if not in cache
+        //
+        if (s_shaderCache.CacheMiss(hash, pOutBytecode))
+#endif
+        {
+            char* pDxilData = nullptr;
+            size_t dxilSize = 0;
+
+            if (!ReadFile(pFilePath, &pDxilData, &dxilSize, true) || dxilSize == 0)
+            {
+                return false;
+            }
+
+            assert(dxilSize != 0);
+            pOutBytecode->BytecodeLength = dxilSize;
+            pOutBytecode->pShaderBytecode = pDxilData;
+
+#ifdef USE_MULTITHREADED_CACHE
+            s_shaderCache.UpdateCache(hash, pOutBytecode);
+#endif
+        }
+
+        return true;
+    }
+
     bool DXCompile(const char *pSrcCode,
         const DefineList* pDefines,
         const char *pEntryPoint,
