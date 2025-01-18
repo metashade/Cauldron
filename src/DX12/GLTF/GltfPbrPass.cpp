@@ -622,13 +622,20 @@ namespace CAULDRON_DX12
             // Empty defines
             DefineList defines;
 
-            auto fileName = [&strMeshName, iPrimitive](const char* pszStage) -> std::string
+            auto loadDxil = [this, &strMeshName, iPrimitive](
+                const char* pszStage, D3D12_SHADER_BYTECODE& outBytecode
+            ) -> void
             {
-                return (boost::format("%1%-%2%-%3%.cso") % strMeshName % iPrimitive % pszStage).str();
+                const std::string strFileName =
+                    (boost::format("%1%-%2%-%3%.cso") % strMeshName % iPrimitive % pszStage).str();
+
+                const std::filesystem::path filePath = m_metashadeOutDir / strFileName;
+
+                LoadPrecompiledDxil(filePath.string().c_str(), &outBytecode);
             };
 
-            LoadPrecompiledDxil((m_metashadeOutDir / fileName("VS")).string().c_str(), &shaderVert);
-            LoadPrecompiledDxil((m_metashadeOutDir / fileName("PS")).string().c_str(), &shaderPixel);
+            loadDxil("VS", shaderVert);
+            loadDxil("PS", shaderPixel);
         }
 
 		// Set blending
