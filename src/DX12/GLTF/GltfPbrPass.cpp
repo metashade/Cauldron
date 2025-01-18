@@ -624,23 +624,11 @@ namespace CAULDRON_DX12
 
             auto fileName = [&strMeshName, iPrimitive](const char* pszStage) -> std::string
             {
-                return (boost::format("%1%-%2%-%3%.hlsl") % strMeshName % iPrimitive % pszStage).str();
+                return (boost::format("%1%-%2%-%3%.cso") % strMeshName % iPrimitive % pszStage).str();
             };
 
-            CompileShaderFromFile(
-                m_metashadeOutDir / fileName("VS"),
-                &defines,
-                "mainVS",
-                "-T vs_6_0 -Zi -Od",
-                &shaderVert
-            );
-            CompileShaderFromFile(
-                m_metashadeOutDir / fileName("PS"),
-                &defines,
-                "mainPS",
-                "-T ps_6_0 -Zi -Od",
-                &shaderPixel
-            );
+            LoadPrecompiledDxil((m_metashadeOutDir / fileName("VS")).string().c_str(), &shaderVert);
+            LoadPrecompiledDxil((m_metashadeOutDir / fileName("PS")).string().c_str(), &shaderPixel);
         }
 
 		// Set blending
