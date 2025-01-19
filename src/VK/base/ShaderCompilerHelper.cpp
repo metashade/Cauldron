@@ -300,4 +300,48 @@ namespace CAULDRON_VK
     {
         DestroyShadersInTheCache(pDevice->GetDevice());
     }
+
+    bool LoadPrecompiledSpirv(
+        VkDevice device,
+        const char* pFilePath,
+        const VkShaderStageFlagBits shader_type,
+        const char* pShaderEntryPoint,
+        VkPipelineShaderStageCreateInfo* pShader
+    )
+    {
+        size_t hash = 2166136261;
+        hash = Hash(pFilePath, strlen(pFilePath), hash);
+
+#ifdef USE_MULTITHREADED_CACHE
+        // Compile if not in cache
+        //
+        if (s_shaderCache.CacheMiss(hash, &pShader->module))
+#endif
+        {
+            char* pSpirvData = nullptr;
+            size_t spirvSize = 0;
+
+            if (!ReadFile(pFilePath, &pSpirvData, &spirvSize, true) || spirvSize == 0)
+            {
+                return false;
+            }
+
+            assert(spirvSize != 0);
+            CreateModule(device, pSpirvData, spirvSize, &pShader->module);
+            free(pSpirvData);
+
+#ifdef USE_MULTITHREADED_CACHE
+            s_shaderCache.UpdateCache(hash, &pShader->module);
+#endif
+        }
+
+        pShader->sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+        pShader->pNext = NULL;
+        pShader->pSpecializationInfo = NULL;
+        pShader->flags = 0;
+        pShader->stage = shader_type;
+        pShader->pName = pShaderEntryPoint;
+
+        return true;
+    }
 }
