@@ -44,6 +44,8 @@ namespace CAULDRON_VK
     bool LoadPrecompiledSpirv(
         VkDevice device,
         const char* pFilePath,
+        const VkShaderStageFlagBits shader_type,
+        const char* pShaderEntryPoint,
         VkPipelineShaderStageCreateInfo* pShader
     );
 }

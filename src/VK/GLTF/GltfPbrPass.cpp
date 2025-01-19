@@ -893,6 +893,8 @@ namespace CAULDRON_VK
             LoadPrecompiledSpirv(
                 m_pDevice->GetDevice(),
                 (m_metashadeOutDir / fileName("frag")).string().c_str(),
+                VK_SHADER_STAGE_FRAGMENT_BIT,
+                "main",
                 &fragmentShader
             );
         }

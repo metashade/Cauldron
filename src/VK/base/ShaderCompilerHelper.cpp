@@ -304,6 +304,8 @@ namespace CAULDRON_VK
     bool LoadPrecompiledSpirv(
         VkDevice device,
         const char* pFilePath,
+        const VkShaderStageFlagBits shader_type,
+        const char* pShaderEntryPoint,
         VkPipelineShaderStageCreateInfo* pShader
     )
     {
@@ -332,6 +334,13 @@ namespace CAULDRON_VK
             s_shaderCache.UpdateCache(hash, &pShader->module);
 #endif
         }
+
+        pShader->sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+        pShader->pNext = NULL;
+        pShader->pSpecializationInfo = NULL;
+        pShader->flags = 0;
+        pShader->stage = shader_type;
+        pShader->pName = pShaderEntryPoint;
 
         return true;
     }
