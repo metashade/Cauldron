@@ -42,6 +42,7 @@ namespace CAULDRON_VK
     VkResult VKCompileFromFile(VkDevice device, const VkShaderStageFlagBits shader_type, const std::filesystem::path& filePath, const char* pShaderEntryPoint, const char* pExtraParams, const DefineList* pDefines, VkPipelineShaderStageCreateInfo* pShader);
 
     bool LoadPrecompiledSpirv(
+        VkDevice device,
         const char* pFilePath,
         VkPipelineShaderStageCreateInfo* pShader
     );

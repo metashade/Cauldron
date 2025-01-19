@@ -884,19 +884,15 @@ namespace CAULDRON_VK
 
             auto fileName = [&strMeshName, iPrimitive](const char* pszStage) -> std::string
             {
-                return (boost::format("%1%-%2%-%3%.glsl") % strMeshName % iPrimitive % pszStage).str();
+                return (boost::format("%1%-%2%-%3%.spv") % strMeshName % iPrimitive % pszStage).str();
             };
 
             // Empty defines
             DefineList emptyDefines;
 
-            VKCompileFromFile(
+            LoadPrecompiledSpirv(
                 m_pDevice->GetDevice(),
-                VK_SHADER_STAGE_FRAGMENT_BIT,
-                m_metashadeOutDir / fileName("frag"),
-                "main",
-                "", // compiler args
-                &emptyDefines,
+                (m_metashadeOutDir / fileName("frag")).string().c_str(),
                 &fragmentShader
             );
         }
