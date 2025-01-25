@@ -126,8 +126,6 @@ namespace CAULDRON_DX12
             std::vector<D3D12_INPUT_ELEMENT_DESC> layout,
             const DefineList& defines,
             PBRPrimitives*,
-            const std::string& strMeshName,
-            uint32_t iPrimitive,
             const json& perPrimitiveShaderIndex
         );
     };
@@ -145,8 +143,6 @@ namespace CAULDRON_DX12
             std::vector<D3D12_INPUT_ELEMENT_DESC> layout,
             const DefineList& defines,
             PBRPrimitives*,
-            const std::string& strMeshName,
-            uint32_t iPrimitive,
             const json& perPrimitiveShaderIndex
         ) override;
 

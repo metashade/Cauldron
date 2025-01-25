@@ -113,8 +113,6 @@ namespace CAULDRON_DX12
 
                 const json &mesh = meshes[iMesh];
                 const json &primitives = mesh["primitives"];
-                const std::string strMeshName = mesh.contains("name") ? mesh["name"].get<std::string>()
-                    : (boost::format("UnnamedMesh%1%") % iMesh).str();
 
                 const json& perMeshShaderIndex = j3MetashadeShaderIndex[iMesh];
 
@@ -127,7 +125,7 @@ namespace CAULDRON_DX12
 
                     ExecAsyncIfThereIsAPool(
                         pAsyncPool,
-                        [this, iMesh, iPrimitive, strMeshName, &primitive, rtDefines, pPrimitive, bUseSSAOMask, &perMeshShaderIndex]()
+                        [this, iMesh, iPrimitive, &primitive, rtDefines, pPrimitive, bUseSSAOMask, &perMeshShaderIndex]()
                         {
                             // Sets primitive's material, or set a default material if none was specified in the GLTF
                             //
@@ -162,8 +160,6 @@ namespace CAULDRON_DX12
                                 inputLayout,
                                 defines,
                                 pPrimitive,
-                                strMeshName,
-                                iPrimitive,
                                 perPrimitiveShaderIndex
                             );
                         }
@@ -393,8 +389,6 @@ namespace CAULDRON_DX12
         std::vector<D3D12_INPUT_ELEMENT_DESC> layout,
         const DefineList &defines,
         PBRPrimitives *pPrimitive,
-        const std::string& /*strMeshName*/,
-        uint32_t /*iPrimitive*/,
         const json& perPrimitiveShaderIndex
     )
     {
@@ -623,8 +617,6 @@ namespace CAULDRON_DX12
         std::vector<D3D12_INPUT_ELEMENT_DESC> layout,
         const DefineList& defines,
         PBRPrimitives* pPrimitive,
-        const std::string& strMeshName,
-        uint32_t iPrimitive,
         const json& perPrimitiveShaderIndex
     )
     {
@@ -635,11 +627,8 @@ namespace CAULDRON_DX12
 
         D3D12_SHADER_BYTECODE shaderVert, shaderPixel;
         {
-            // Empty defines
-            DefineList defines;
-
             auto loadDxil = [
-                this, &strMeshName, iPrimitive, &dxShaderIndex
+                this, &dxShaderIndex
             ](
                 const char* pszStage,
                 D3D12_SHADER_BYTECODE& outBytecode
