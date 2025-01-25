@@ -22,21 +22,39 @@
 #include "GltfHelpers.h"
 #include "Misc/Misc.h"
 
-bool GLTFCommon::Load(const std::string &path, const std::string &filename)
+#include <filesystem>
+
+bool GLTFCommon::Load(
+    const std::string& assetDirPath,
+    const std::string& assetFilename,
+    const std::filesystem::path& metashadeOutDir
+)
 {
     Profile p("GLTFCommon::Load");
 
-    m_path = path;
+    m_path = assetDirPath;
 
     {
-        std::ifstream f(path + filename);
+        std::ifstream f(assetDirPath + assetFilename);
         if (!f)
         {
-            Trace(format("The file %s cannot be found\n", filename.c_str()));
+            Trace(format("The file %s cannot be found\n", assetFilename.c_str()));
             return false;
         }
 
         f >> j3;
+    }
+
+    {
+        const std::filesystem::path shaderIndexPath = (metashadeOutDir / assetFilename).replace_extension(".json");
+        std::ifstream f(shaderIndexPath);
+        if (!f)
+        {
+            Trace(format("The file %s cannot be found\n", assetFilename.c_str()));
+            return false;
+        }
+
+        f >> j3MetashadeShaderIndex;
     }
 
     // Load Buffers
@@ -48,7 +66,7 @@ bool GLTFCommon::Load(const std::string &path, const std::string &filename)
         for (int i = 0; i < buffers.size(); i++)
         {
             const std::string &name = buffers[i]["uri"];
-            std::ifstream ff(path + name, std::ios::in | std::ios::binary);
+            std::ifstream ff(assetDirPath + name, std::ios::in | std::ios::binary);
 
             ff.seekg(0, ff.end);
             std::streamoff length = ff.tellg();
@@ -394,6 +412,7 @@ void GLTFCommon::Unload()
     m_lightInstances.clear();
 
     j3.clear();
+    j3MetashadeShaderIndex.clear();
 }
 
 //

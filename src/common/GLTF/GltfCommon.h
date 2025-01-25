@@ -105,7 +105,7 @@ struct per_frame
 class GLTFCommon
 {
 public:
-    json j3;
+    json j3, j3MetashadeShaderIndex;
 
     std::string m_path;
     std::vector<tfScene> m_scenes;
@@ -130,7 +130,11 @@ public:
 
     per_frame m_perFrameData;
 
-    bool Load(const std::string &path, const std::string &filename);
+    bool Load(
+        const std::string& assetDirPath,
+        const std::string& assetFilename,
+        const std::filesystem::path& metashadeOutDir
+    );
     void Unload();
 
     // misc functions
