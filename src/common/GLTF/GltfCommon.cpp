@@ -45,6 +45,7 @@ bool GLTFCommon::Load(
         f >> j3;
     }
 
+    if (!metashadeOutDir.empty())
     {
         const std::filesystem::path shaderIndexPath = (metashadeOutDir / assetFilename).replace_extension(".json");
         std::ifstream f(shaderIndexPath);
