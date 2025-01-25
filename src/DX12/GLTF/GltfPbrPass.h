@@ -127,7 +127,8 @@ namespace CAULDRON_DX12
             const DefineList& defines,
             PBRPrimitives*,
             const std::string& strMeshName,
-            uint32_t iPrimitive
+            uint32_t iPrimitive,
+            const json& perPrimitiveShaderIndex
         );
     };
 
@@ -145,7 +146,8 @@ namespace CAULDRON_DX12
             const DefineList& defines,
             PBRPrimitives*,
             const std::string& strMeshName,
-            uint32_t iPrimitive
+            uint32_t iPrimitive,
+            const json& perPrimitiveShaderIndex
         ) override;
 
         const std::filesystem::path     m_metashadeOutDir;

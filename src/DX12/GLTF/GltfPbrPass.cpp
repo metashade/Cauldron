@@ -70,7 +70,9 @@ namespace CAULDRON_DX12
             CreateDescriptorTableForMaterialTextures(&m_defaultMaterial, texturesBase, pSkyDome, bUseShadowMask, bUseSSAOMask);
         }
 
-        const json &j3 = m_pGLTFTexturesAndBuffers->m_pGLTFCommon->j3;
+        const json
+            &j3 = m_pGLTFTexturesAndBuffers->m_pGLTFCommon->j3,
+            &j3MetashadeShaderIndex = m_pGLTFTexturesAndBuffers->m_pGLTFCommon->j3MetashadeShaderIndex;
 
         // Load PBR 2.0 Materials
         //
@@ -114,6 +116,8 @@ namespace CAULDRON_DX12
                 const std::string strMeshName = mesh.contains("name") ? mesh["name"].get<std::string>()
                     : (boost::format("UnnamedMesh%1%") % iMesh).str();
 
+                const json& perMeshShaderIndex = j3MetashadeShaderIndex[iMesh];
+
                 tfmesh->m_pPrimitives.resize(primitives.size());
 
                 for (uint32_t iPrimitive = 0; iPrimitive < primitives.size(); iPrimitive++)
@@ -121,42 +125,49 @@ namespace CAULDRON_DX12
                     const json &primitive = primitives[iPrimitive];
                     PBRPrimitives *pPrimitive = &tfmesh->m_pPrimitives[iPrimitive];
 
-                    ExecAsyncIfThereIsAPool(pAsyncPool, [this, iMesh, iPrimitive, strMeshName, &primitive, rtDefines, pPrimitive, bUseSSAOMask]()
-                    {
-                        // Sets primitive's material, or set a default material if none was specified in the GLTF
-                        //
-                        auto mat = primitive.find("material");
-                        pPrimitive->m_pMaterial = (mat != primitive.end()) ? &m_materialsData[mat.value()] : &m_defaultMaterial;
+                    ExecAsyncIfThereIsAPool(
+                        pAsyncPool,
+                        [this, iMesh, iPrimitive, strMeshName, &primitive, rtDefines, pPrimitive, bUseSSAOMask, &perMeshShaderIndex]()
+                        {
+                            // Sets primitive's material, or set a default material if none was specified in the GLTF
+                            //
+                            auto mat = primitive.find("material");
+                            pPrimitive->m_pMaterial = (mat != primitive.end()) ? &m_materialsData[mat.value()] : &m_defaultMaterial;
 
-                        // holds all the #defines from materials, geometry and texture IDs, the VS & PS shaders need this to get the bindings and code paths
-                        //
-                        DefineList defines = pPrimitive->m_pMaterial->m_pbrMaterialParameters.m_defines + rtDefines;
+                            // holds all the #defines from materials, geometry and texture IDs, the VS & PS shaders need this to get the bindings and code paths
+                            //
+                            DefineList defines = pPrimitive->m_pMaterial->m_pbrMaterialParameters.m_defines + rtDefines;
 
-                        // make a list of all the attribute names our pass requires, in the case of PBR we need them all
-                        //
-                        std::vector<std::string> requiredAttributes;
-                        for (auto const & it : primitive["attributes"].items())
-                            requiredAttributes.push_back(it.key());
+                            // make a list of all the attribute names our pass requires, in the case of PBR we need them all
+                            //
+                            std::vector<std::string> requiredAttributes;
+                            for (auto const & it : primitive["attributes"].items())
+                                requiredAttributes.push_back(it.key());
 
-                        // create an input layout from the required attributes
-                        // shader's can tell the slots from the #defines
-                        //
-                        std::vector<std::string> semanticNames;
-                        std::vector<D3D12_INPUT_ELEMENT_DESC> inputLayout;
-                        m_pGLTFTexturesAndBuffers->CreateGeometry(primitive, requiredAttributes, semanticNames, inputLayout, defines, &pPrimitive->m_geometry);
+                            // create an input layout from the required attributes
+                            // shader's can tell the slots from the #defines
+                            //
+                            std::vector<std::string> semanticNames;
+                            std::vector<D3D12_INPUT_ELEMENT_DESC> inputLayout;
+                            m_pGLTFTexturesAndBuffers->CreateGeometry(primitive, requiredAttributes, semanticNames, inputLayout, defines, &pPrimitive->m_geometry);
 
-                        // Create the descriptors, the root signature and the pipeline
-                        //
-                        bool bUsingSkinning = m_pGLTFTexturesAndBuffers->m_pGLTFCommon->FindMeshSkinId(iMesh) != -1;
-                        CreateRootSignature(bUsingSkinning, defines, pPrimitive, bUseSSAOMask);
-                        CreatePipeline(
-                            inputLayout,
-                            defines,
-                            pPrimitive,
-                            strMeshName,
-                            iPrimitive
-                        );
-                    });
+                            // Create the descriptors, the root signature and the pipeline
+                            //
+                            bool bUsingSkinning = m_pGLTFTexturesAndBuffers->m_pGLTFCommon->FindMeshSkinId(iMesh) != -1;
+
+                            const json& perPrimitiveShaderIndex = perMeshShaderIndex[iPrimitive];
+
+                            CreateRootSignature(bUsingSkinning, defines, pPrimitive, bUseSSAOMask);
+                            CreatePipeline(
+                                inputLayout,
+                                defines,
+                                pPrimitive,
+                                strMeshName,
+                                iPrimitive,
+                                perPrimitiveShaderIndex
+                            );
+                        }
+                    );
                 }
             }
         }
@@ -383,7 +394,8 @@ namespace CAULDRON_DX12
         const DefineList &defines,
         PBRPrimitives *pPrimitive,
         const std::string& /*strMeshName*/,
-        uint32_t /*iPrimitive*/
+        uint32_t /*iPrimitive*/,
+        const json& perPrimitiveShaderIndex
     )
     {
         // Compile and create shaders
@@ -612,30 +624,39 @@ namespace CAULDRON_DX12
         const DefineList& defines,
         PBRPrimitives* pPrimitive,
         const std::string& strMeshName,
-        uint32_t iPrimitive)
+        uint32_t iPrimitive,
+        const json& perPrimitiveShaderIndex
+    )
     {
         /////////////////////////////////////////////
         // Compile and create shaders
+
+        const json& dxShaderIndex = perPrimitiveShaderIndex["dx"];
 
         D3D12_SHADER_BYTECODE shaderVert, shaderPixel;
         {
             // Empty defines
             DefineList defines;
 
-            auto loadDxil = [this, &strMeshName, iPrimitive](
-                const char* pszStage, D3D12_SHADER_BYTECODE& outBytecode
+            auto loadDxil = [
+                this, &strMeshName, iPrimitive, &dxShaderIndex
+            ](
+                const char* pszStage,
+                D3D12_SHADER_BYTECODE& outBytecode
             ) -> void
             {
-                const std::string strFileName =
-                    (boost::format("%1%-%2%-%3%.cso") % strMeshName % iPrimitive % pszStage).str();
+                const auto itFileName = dxShaderIndex.find(pszStage);
+                if (itFileName != dxShaderIndex.end())
+                {
+                    const std::string& strFileName = *itFileName;
+                    const std::filesystem::path filePath = m_metashadeOutDir / strFileName;
 
-                const std::filesystem::path filePath = m_metashadeOutDir / strFileName;
-
-                LoadPrecompiledDxil(filePath.string().c_str(), &outBytecode);
+                    LoadPrecompiledDxil(filePath.string().c_str(), &outBytecode);
+                }
             };
 
-            loadDxil("VS", shaderVert);
-            loadDxil("PS", shaderPixel);
+            loadDxil("vs", shaderVert);
+            loadDxil("ps", shaderPixel);
         }
 
 		// Set blending
