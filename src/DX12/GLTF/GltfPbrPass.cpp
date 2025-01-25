@@ -632,20 +632,30 @@ namespace CAULDRON_DX12
             ](
                 const char* pszStage,
                 D3D12_SHADER_BYTECODE& outBytecode
-            ) -> void
+            ) -> bool
             {
                 const auto itFileName = dxShaderIndex.find(pszStage);
-                if (itFileName != dxShaderIndex.end())
+                if (itFileName == dxShaderIndex.end())
                 {
-                    const std::string& strFileName = *itFileName;
-                    const std::filesystem::path filePath = m_metashadeOutDir / strFileName;
-
-                    LoadPrecompiledDxil(filePath.string().c_str(), &outBytecode);
+                    return false;
                 }
+
+                const std::string& strFileName = *itFileName;
+                const std::filesystem::path filePath = m_metashadeOutDir / strFileName;
+
+                LoadPrecompiledDxil(filePath.string().c_str(), &outBytecode);
+                return true;
             };
 
-            loadDxil("vs", shaderVert);
-            loadDxil("ps", shaderPixel);
+            if (!loadDxil("vs", shaderVert))
+            {
+                CompileShaderFromFile("GLTFPbrPass-VS.hlsl", &defines, "mainVS", "-T vs_6_0 -Zi -Od", &shaderVert);
+            }
+            
+            if (!loadDxil("ps", shaderPixel))
+            {
+                CompileShaderFromFile("GLTFPbrPass-PS.hlsl", &defines, "mainPS", "-T ps_6_0 -Zi -Od", &shaderPixel);
+            }
         }
 
 		// Set blending
