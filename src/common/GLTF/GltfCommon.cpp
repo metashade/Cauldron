@@ -28,14 +28,16 @@ bool GLTFCommon::Load(const std::string &path, const std::string &filename)
 
     m_path = path;
 
-    std::ifstream f(path + filename);
-    if (!f)
     {
-        Trace(format("The file %s cannot be found\n", filename.c_str()));
-        return false;
-    }
+        std::ifstream f(path + filename);
+        if (!f)
+        {
+            Trace(format("The file %s cannot be found\n", filename.c_str()));
+            return false;
+        }
 
-    f >> j3;
+        f >> j3;
+    }
 
     // Load Buffers
     //
