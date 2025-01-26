@@ -60,8 +60,10 @@ namespace CAULDRON_VK
     class GltfPbrPass
     {
     public:
-        virtual ~GltfPbrPass(){}
-        
+        explicit GltfPbrPass(const std::filesystem::path& metashadeOutDir)
+            : m_metashadeOutDir(metashadeOutDir)
+        {}
+
         struct per_object
         {
             math::Matrix4 mCurrentWorld;
@@ -124,34 +126,15 @@ namespace CAULDRON_VK
 
         bool                     m_bInvertedDepth;
 
+        const std::filesystem::path     m_metashadeOutDir;
+
         void CreateDescriptorTableForMaterialTextures(PBRMaterial *tfmat, std::map<std::string, VkImageView> &texturesBase, SkyDome *pSkyDome, std::vector<VkImageView>& ShadowMapViewPool, bool bUseSSAOMask);
         void CreateDescriptors(int inverseMatrixBufferSize, DefineList *pAttributeDefines, PBRPrimitives *pPrimitive, bool bUseSSAOMask);
-        virtual void CreatePipeline(
+        void CreatePipeline(
             std::vector<VkVertexInputAttributeDescription> layout,
             const DefineList &defines,
             PBRPrimitives *pPrimitive,
-            const std::string& strMeshName,
-            uint32_t iPrimitive
+            const json* pPerPrimitiveShaderIndex
         );
-    };
-
-    class MetashadeGltfPbrPass
-        : public GltfPbrPass
-    {
-    public:
-        MetashadeGltfPbrPass(const std::filesystem::path& metashadeOutDir)
-            : m_metashadeOutDir(metashadeOutDir)
-        {}
-
-    private:
-        void CreatePipeline(
-            std::vector<VkVertexInputAttributeDescription> layout,
-            const DefineList& defines,
-            PBRPrimitives*,
-            const std::string& strMeshName,
-            uint32_t iPrimitive
-        ) override;
-
-        const std::filesystem::path     m_metashadeOutDir;
     };
 }

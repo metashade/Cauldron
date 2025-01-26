@@ -70,7 +70,9 @@ namespace CAULDRON_DX12
             CreateDescriptorTableForMaterialTextures(&m_defaultMaterial, texturesBase, pSkyDome, bUseShadowMask, bUseSSAOMask);
         }
 
-        const json &j3 = m_pGLTFTexturesAndBuffers->m_pGLTFCommon->j3;
+        const json
+            &j3 = m_pGLTFTexturesAndBuffers->m_pGLTFCommon->j3,
+            &j3MetashadeShaderIndex = m_pGLTFTexturesAndBuffers->m_pGLTFCommon->j3MetashadeShaderIndex;
 
         // Load PBR 2.0 Materials
         //
@@ -111,8 +113,8 @@ namespace CAULDRON_DX12
 
                 const json &mesh = meshes[iMesh];
                 const json &primitives = mesh["primitives"];
-                const std::string strMeshName = mesh.contains("name") ? mesh["name"].get<std::string>()
-                    : (boost::format("UnnamedMesh%1%") % iMesh).str();
+
+                const json* pPerMeshShaderIndex = m_metashadeOutDir.empty() ? nullptr : &(j3MetashadeShaderIndex[iMesh]);
 
                 tfmesh->m_pPrimitives.resize(primitives.size());
 
@@ -121,42 +123,45 @@ namespace CAULDRON_DX12
                     const json &primitive = primitives[iPrimitive];
                     PBRPrimitives *pPrimitive = &tfmesh->m_pPrimitives[iPrimitive];
 
-                    ExecAsyncIfThereIsAPool(pAsyncPool, [this, iMesh, iPrimitive, strMeshName, &primitive, rtDefines, pPrimitive, bUseSSAOMask]()
-                    {
-                        // Sets primitive's material, or set a default material if none was specified in the GLTF
-                        //
-                        auto mat = primitive.find("material");
-                        pPrimitive->m_pMaterial = (mat != primitive.end()) ? &m_materialsData[mat.value()] : &m_defaultMaterial;
+                    ExecAsyncIfThereIsAPool(
+                        pAsyncPool,
+                        [this, iMesh, iPrimitive, &primitive, rtDefines, pPrimitive, bUseSSAOMask, pPerMeshShaderIndex]()
+                        {
+                            // Sets primitive's material, or set a default material if none was specified in the GLTF
+                            //
+                            auto mat = primitive.find("material");
+                            pPrimitive->m_pMaterial = (mat != primitive.end()) ? &m_materialsData[mat.value()] : &m_defaultMaterial;
 
-                        // holds all the #defines from materials, geometry and texture IDs, the VS & PS shaders need this to get the bindings and code paths
-                        //
-                        DefineList defines = pPrimitive->m_pMaterial->m_pbrMaterialParameters.m_defines + rtDefines;
+                            // holds all the #defines from materials, geometry and texture IDs, the VS & PS shaders need this to get the bindings and code paths
+                            //
+                            DefineList defines = pPrimitive->m_pMaterial->m_pbrMaterialParameters.m_defines + rtDefines;
 
-                        // make a list of all the attribute names our pass requires, in the case of PBR we need them all
-                        //
-                        std::vector<std::string> requiredAttributes;
-                        for (auto const & it : primitive["attributes"].items())
-                            requiredAttributes.push_back(it.key());
+                            // make a list of all the attribute names our pass requires, in the case of PBR we need them all
+                            //
+                            std::vector<std::string> requiredAttributes;
+                            for (auto const & it : primitive["attributes"].items())
+                                requiredAttributes.push_back(it.key());
 
-                        // create an input layout from the required attributes
-                        // shader's can tell the slots from the #defines
-                        //
-                        std::vector<std::string> semanticNames;
-                        std::vector<D3D12_INPUT_ELEMENT_DESC> inputLayout;
-                        m_pGLTFTexturesAndBuffers->CreateGeometry(primitive, requiredAttributes, semanticNames, inputLayout, defines, &pPrimitive->m_geometry);
+                            // create an input layout from the required attributes
+                            // shader's can tell the slots from the #defines
+                            //
+                            std::vector<std::string> semanticNames;
+                            std::vector<D3D12_INPUT_ELEMENT_DESC> inputLayout;
+                            m_pGLTFTexturesAndBuffers->CreateGeometry(primitive, requiredAttributes, semanticNames, inputLayout, defines, &pPrimitive->m_geometry);
 
-                        // Create the descriptors, the root signature and the pipeline
-                        //
-                        bool bUsingSkinning = m_pGLTFTexturesAndBuffers->m_pGLTFCommon->FindMeshSkinId(iMesh) != -1;
-                        CreateRootSignature(bUsingSkinning, defines, pPrimitive, bUseSSAOMask);
-                        CreatePipeline(
-                            inputLayout,
-                            defines,
-                            pPrimitive,
-                            strMeshName,
-                            iPrimitive
-                        );
-                    });
+                            // Create the descriptors, the root signature and the pipeline
+                            //
+                            bool bUsingSkinning = m_pGLTFTexturesAndBuffers->m_pGLTFCommon->FindMeshSkinId(iMesh) != -1;
+
+                            CreateRootSignature(bUsingSkinning, defines, pPrimitive, bUseSSAOMask);
+                            CreatePipeline(
+                                inputLayout,
+                                defines,
+                                pPrimitive,
+                                pPerMeshShaderIndex ? &(*pPerMeshShaderIndex)[iPrimitive] : nullptr
+                            );
+                        }
+                    );
                 }
             }
         }
@@ -382,15 +387,50 @@ namespace CAULDRON_DX12
         std::vector<D3D12_INPUT_ELEMENT_DESC> layout,
         const DefineList &defines,
         PBRPrimitives *pPrimitive,
-        const std::string& /*strMeshName*/,
-        uint32_t /*iPrimitive*/
+        const json* pPerPrimitiveShaderIndex
     )
     {
         // Compile and create shaders
         //
         D3D12_SHADER_BYTECODE shaderVert, shaderPixel;
-        CompileShaderFromFile("GLTFPbrPass-VS.hlsl", &defines, "mainVS", "-T vs_6_0 -Zi -Od", &shaderVert);
-        CompileShaderFromFile("GLTFPbrPass-PS.hlsl", &defines, "mainPS", "-T ps_6_0 -Zi -Od", &shaderPixel);
+        {
+            const json* pDxShaderIndex = pPerPrimitiveShaderIndex ? &((*pPerPrimitiveShaderIndex)["dx"]) : nullptr;
+
+            auto loadDxil = [
+                this, &pDxShaderIndex
+            ](
+                const char* pszStage,
+                D3D12_SHADER_BYTECODE& outBytecode
+                ) -> bool
+            {
+                if (!pDxShaderIndex || m_metashadeOutDir.empty())
+                {
+                    return false;
+                }
+
+                const auto itFileName = pDxShaderIndex->find(pszStage);
+                if (itFileName == pDxShaderIndex->end())
+                {
+                    return false;
+                }
+
+                const std::string& strFileName = *itFileName;
+                const std::filesystem::path filePath = m_metashadeOutDir / strFileName;
+
+                LoadPrecompiledDxil(filePath.string().c_str(), &outBytecode);
+                return true;
+            };
+
+            if (!loadDxil("vs", shaderVert))
+            {
+                CompileShaderFromFile("GLTFPbrPass-VS.hlsl", &defines, "mainVS", "-T vs_6_0 -Zi -Od", &shaderVert);
+            }
+
+            if (!loadDxil("ps", shaderPixel))
+            {
+                CompileShaderFromFile("GLTFPbrPass-PS.hlsl", &defines, "mainPS", "-T ps_6_0 -Zi -Od", &shaderPixel);
+            }
+        }
 
         // Set blending
         //
@@ -605,115 +645,5 @@ namespace CAULDRON_DX12
         // Draw
         //
         pCommandList->DrawIndexedInstanced(m_geometry.m_NumIndices, 1, 0, 0, 0);
-    }
-
-    void MetashadeGltfPbrPass::CreatePipeline(
-        std::vector<D3D12_INPUT_ELEMENT_DESC> layout,
-        const DefineList& defines,
-        PBRPrimitives* pPrimitive,
-        const std::string& strMeshName,
-        uint32_t iPrimitive)
-    {
-        /////////////////////////////////////////////
-        // Compile and create shaders
-
-        D3D12_SHADER_BYTECODE shaderVert, shaderPixel;
-        {
-            // Empty defines
-            DefineList defines;
-
-            auto loadDxil = [this, &strMeshName, iPrimitive](
-                const char* pszStage, D3D12_SHADER_BYTECODE& outBytecode
-            ) -> void
-            {
-                const std::string strFileName =
-                    (boost::format("%1%-%2%-%3%.cso") % strMeshName % iPrimitive % pszStage).str();
-
-                const std::filesystem::path filePath = m_metashadeOutDir / strFileName;
-
-                LoadPrecompiledDxil(filePath.string().c_str(), &outBytecode);
-            };
-
-            loadDxil("VS", shaderVert);
-            loadDxil("PS", shaderPixel);
-        }
-
-		// Set blending
-		//
-		int upscaleReactiveRT = m_pGBufferRenderPass->GetRtIndex(GBUFFER_UPSCALEREACTIVE);
-		int upscaleTransparencyAndCompositionRT = m_pGBufferRenderPass->GetRtIndex(GBUFFER_UPSCALE_TRANSPARENCY_AND_COMPOSITION);
-		CD3DX12_BLEND_DESC blendState = CD3DX12_BLEND_DESC(D3D12_DEFAULT);
-		blendState.IndependentBlendEnable = (upscaleReactiveRT != -1);
-		for (int i = 0; i < this->m_outFormats.size(); ++i)
-		{
-			blendState.RenderTarget[i] = D3D12_RENDER_TARGET_BLEND_DESC
-			{
-				(defines.Has("DEF_alphaMode_BLEND")),
-				FALSE,
-				D3D12_BLEND_SRC_ALPHA, D3D12_BLEND_INV_SRC_ALPHA, D3D12_BLEND_OP_ADD,
-				D3D12_BLEND_ONE, D3D12_BLEND_ZERO, D3D12_BLEND_OP_ADD,
-				D3D12_LOGIC_OP_NOOP,
-				D3D12_COLOR_WRITE_ENABLE_ALL,
-			};
-			if (i == upscaleReactiveRT || i == upscaleTransparencyAndCompositionRT)
-			{
-				true,
-					blendState.RenderTarget[i].SrcBlend = defines.Has("DEF_alphaMode_BLEND") ? D3D12_BLEND_INV_DEST_COLOR : D3D12_BLEND_ONE;
-				blendState.RenderTarget[i].DestBlend = D3D12_BLEND_ONE;
-				blendState.RenderTarget[i].RenderTargetWriteMask = defines.Has("DEF_alphaMode_BLEND") ? D3D12_COLOR_WRITE_ENABLE_RED : D3D12_COLOR_WRITE_ENABLE_ALPHA;
-
-				bool bHasAnimatedTexture = false;
-				bHasAnimatedTexture |= defines.Has("HAS_NORMAL_UV_TRANSFORM");
-				bHasAnimatedTexture |= defines.Has("HAS_EMISSIVE_UV_TRANSFORM");
-				bHasAnimatedTexture |= defines.Has("HAS_OCCLSION_UV_TRANSFORM");
-				bHasAnimatedTexture |= defines.Has("HAS_BASECOLOR_UV_TRANSFORM");
-				bHasAnimatedTexture |= defines.Has("HAS_METALLICROUGHNESS_UV_TRANSFORM");
-				bHasAnimatedTexture |= defines.Has("HAS_SPECULARGLOSSINESS_UV_TRANSFORM");
-				bHasAnimatedTexture |= defines.Has("HAS_DIFFUSE_UV_TRANSFORM");
-				if (bHasAnimatedTexture)
-					blendState.RenderTarget[i].RenderTargetWriteMask |= D3D12_COLOR_WRITE_ENABLE_BLUE;
-			}
-		}
-		// Create a PSO description
-		//
-		D3D12_GRAPHICS_PIPELINE_STATE_DESC descPso = {};
-		descPso.InputLayout = { layout.data(), (UINT)layout.size() };
-		descPso.pRootSignature = pPrimitive->m_RootSignature;
-		descPso.VS = shaderVert;
-		descPso.PS = shaderPixel;
-		descPso.RasterizerState = CD3DX12_RASTERIZER_DESC(D3D12_DEFAULT);
-		descPso.RasterizerState.CullMode = (pPrimitive->m_pMaterial->m_pbrMaterialParameters.m_doubleSided) ? D3D12_CULL_MODE_NONE : D3D12_CULL_MODE_FRONT;
-		descPso.BlendState = blendState;
-		descPso.DepthStencilState = CD3DX12_DEPTH_STENCIL_DESC(D3D12_DEFAULT);
-		if (defines.Has("DEF_alphaMode_BLEND")) {
-			descPso.DepthStencilState.DepthWriteMask = D3D12_DEPTH_WRITE_MASK_ZERO;
-		}
-		else {
-			descPso.DepthStencilState.DepthWriteMask = D3D12_DEPTH_WRITE_MASK_ALL;
-		}
-		descPso.DepthStencilState.DepthFunc = m_bInvertedDepth ? D3D12_COMPARISON_FUNC_GREATER_EQUAL : D3D12_COMPARISON_FUNC_LESS_EQUAL;
-		descPso.SampleMask = UINT_MAX;
-		descPso.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
-		descPso.NumRenderTargets = (UINT)m_outFormats.size();
-		for (size_t i = 0; i < m_outFormats.size(); i++)
-		{
-			descPso.RTVFormats[i] = m_outFormats[i];
-		}
-		descPso.DSVFormat = DXGI_FORMAT_D32_FLOAT;
-		descPso.SampleDesc.Count = m_sampleCount;
-		descPso.NodeMask = 0;
-
-		ThrowIfFailed(
-			m_pDevice->GetDevice()->CreateGraphicsPipelineState(&descPso, IID_PPV_ARGS(&pPrimitive->m_PipelineRender))
-		);
-		SetName(pPrimitive->m_PipelineRender, "GltfPbrPass::m_PipelineRender");
-
-		// create wireframe pipeline
-		descPso.RasterizerState.FillMode = D3D12_FILL_MODE_WIREFRAME;
-		descPso.RasterizerState.CullMode = D3D12_CULL_MODE_NONE;
-		ThrowIfFailed(
-			m_pDevice->GetDevice()->CreateGraphicsPipelineState(&descPso, IID_PPV_ARGS(&pPrimitive->m_PipelineWireframeRender))
-		);
-		SetName(pPrimitive->m_PipelineWireframeRender, "GltfPbrPass::m_PipelineWireframeRender");
     }
 }
