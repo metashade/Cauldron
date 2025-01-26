@@ -158,7 +158,7 @@ namespace CAULDRON_DX12
                                 inputLayout,
                                 defines,
                                 pPrimitive,
-                                pPerMeshShaderIndex ? &(pPerMeshShaderIndex[iPrimitive]) : nullptr
+                                pPerMeshShaderIndex ? &(*pPerMeshShaderIndex)[iPrimitive] : nullptr
                             );
                         }
                     );
@@ -393,7 +393,7 @@ namespace CAULDRON_DX12
         // Compile and create shaders
         //
 
-        const json* pDxShaderIndex = pPerPrimitiveShaderIndex ? &(*pPerPrimitiveShaderIndex)["dx"] : nullptr;
+        const json* pDxShaderIndex = pPerPrimitiveShaderIndex ? &((*pPerPrimitiveShaderIndex)["dx"]) : nullptr;
 
         D3D12_SHADER_BYTECODE shaderVert, shaderPixel;
         {
