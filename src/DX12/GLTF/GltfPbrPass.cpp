@@ -392,11 +392,10 @@ namespace CAULDRON_DX12
     {
         // Compile and create shaders
         //
-
-        const json* pDxShaderIndex = pPerPrimitiveShaderIndex ? &((*pPerPrimitiveShaderIndex)["dx"]) : nullptr;
-
         D3D12_SHADER_BYTECODE shaderVert, shaderPixel;
         {
+            const json* pDxShaderIndex = pPerPrimitiveShaderIndex ? &((*pPerPrimitiveShaderIndex)["dx"]) : nullptr;
+
             auto loadDxil = [
                 this, &pDxShaderIndex
             ](

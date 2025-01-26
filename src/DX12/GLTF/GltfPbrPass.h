@@ -56,10 +56,9 @@ namespace CAULDRON_DX12
     class GltfPbrPass
     {
     public:
-        GltfPbrPass(const std::filesystem::path& metashadeOutDir)
+        explicit GltfPbrPass(const std::filesystem::path& metashadeOutDir)
             : m_metashadeOutDir(metashadeOutDir)
         {}
-        virtual ~GltfPbrPass(){}
 
         struct per_object
         {
@@ -122,6 +121,8 @@ namespace CAULDRON_DX12
 
         bool                     m_bInvertedDepth;
 
+        const std::filesystem::path&     m_metashadeOutDir;
+
         void CreateDescriptorTableForMaterialTextures(PBRMaterial *tfmat, std::map<std::string, Texture *> &texturesBase, SkyDome *pSkyDome, bool bUseShadowMask, bool bUseSSAOMask);
         void CreateRootSignature(bool bUsingSkinning, DefineList &defines, PBRPrimitives *pPrimitive, bool bUseSSAOMask);
         
@@ -131,8 +132,6 @@ namespace CAULDRON_DX12
             PBRPrimitives*,
             const json* pPerPrimitiveShaderIndex
         );
-
-        const std::filesystem::path&     m_metashadeOutDir;
     };
 }
 
