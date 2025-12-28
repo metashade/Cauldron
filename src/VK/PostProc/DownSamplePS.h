@@ -52,10 +52,10 @@ namespace CAULDRON_VK
 
         struct Pass
         {
-            VkImageView     RTV; //dest
-            VkImageView     m_SRV; //src
-            VkFramebuffer   frameBuffer;
-            VkDescriptorSet descriptorSet;
+            VkImageView     RTV = VK_NULL_HANDLE; //dest
+            VkImageView     m_SRV = VK_NULL_HANDLE; //src
+            VkFramebuffer   frameBuffer = VK_NULL_HANDLE;
+            VkDescriptorSet descriptorSet = VK_NULL_HANDLE;
         };
 
         Pass                         m_mip[DOWNSAMPLEPS_MAX_MIP_LEVELS];
@@ -66,7 +66,7 @@ namespace CAULDRON_VK
 
         uint32_t                     m_Width;
         uint32_t                     m_Height;
-        int                          m_mipCount;
+        int                          m_mipCount = 0;
 
         VkDescriptorSetLayout        m_descriptorSetLayout;
 

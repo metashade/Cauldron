@@ -58,10 +58,12 @@ namespace CAULDRON_VK
 
     void GBufferRenderPass::OnDestroyWindowSizeDependentResources()
     {
-        if (m_frameBuffer != nullptr)
+        if (!m_pGBuffer) return;
+
+        if (m_frameBuffer != VK_NULL_HANDLE)
         {
             vkDestroyFramebuffer(m_pGBuffer->GetDevice()->GetDevice(), m_frameBuffer, nullptr);
-            m_frameBuffer = {};
+            m_frameBuffer = VK_NULL_HANDLE;
         }
     }
 
@@ -500,6 +502,8 @@ namespace CAULDRON_VK
 
     void GBuffer::OnDestroyWindowSizeDependentResources()
     {
+        if (!m_pDevice) return;
+
         if (m_GBufferFlags & GBUFFER_UPSCALE_TRANSPARENCY_AND_COMPOSITION)
         {
             if (m_UpscaleTransparencyAndCompositionSRV != nullptr)

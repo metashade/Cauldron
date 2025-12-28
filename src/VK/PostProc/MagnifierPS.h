@@ -126,12 +126,12 @@ namespace CAULDRON_VK
 		//
 		// RENDER PASSES & RESOURCE VIEWS
 		//
-		VkSampler   m_SamplerSrc;
+		VkSampler   m_SamplerSrc = VK_NULL_HANDLE;
 
-		VkRenderPass  m_RenderPass;
-		VkFramebuffer m_FrameBuffer;
-		VkImageView   m_RTVOutput;
-		VkImageView   m_SRVOutput;
+		VkRenderPass  m_RenderPass = VK_NULL_HANDLE;
+		VkFramebuffer m_FrameBuffer = VK_NULL_HANDLE;
+		VkImageView   m_RTVOutput = VK_NULL_HANDLE;
+		VkImageView   m_SRVOutput = VK_NULL_HANDLE;
 
 		//
 		// BUFFERS

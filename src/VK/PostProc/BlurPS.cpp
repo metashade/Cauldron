@@ -209,6 +209,10 @@ namespace CAULDRON_VK
 
     void BlurPS::OnDestroyWindowSizeDependentResources()
     {
+        // Early out if window-size-dependent resources were never created
+        if (m_mipCount == 0)
+            return;
+
         // destroy views and framebuffers of the vertical and horizontal passes
         //
         for (int i = 0; i < m_mipCount; i++)

@@ -54,7 +54,7 @@ namespace CAULDRON_VK
 
         uint32_t                   m_Width;
         uint32_t                   m_Height;
-        int                        m_mipCount;
+        int                        m_mipCount = 0;
 
         Texture*                   m_inputTexture;
         Texture                    m_tempBlur;

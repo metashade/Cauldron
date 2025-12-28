@@ -180,6 +180,12 @@ namespace CAULDRON_VK
 
     void DownSamplePS::OnDestroyWindowSizeDependentResources()
     {
+        if (!m_pDevice) return;
+
+        // Early out if window-size-dependent resources were never created
+        if (m_mipCount == 0)
+            return;
+
         for (int i = 0; i < m_mipCount; i++)
         {
             if (m_mip[i].m_SRV != nullptr)
@@ -192,6 +198,7 @@ namespace CAULDRON_VK
         }
 
         m_result.OnDestroy();
+        m_mipCount = 0;  // Reset so we know resources are destroyed
     }
 
     void DownSamplePS::OnDestroy()

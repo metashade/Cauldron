@@ -61,11 +61,11 @@ namespace CAULDRON_VK
         VkFramebuffer GetFramebuffer() { return m_frameBuffer; }
         VkSampleCountFlagBits  GetSampleCount();
     private:
-        Device                         *m_pDevice;
-        GBufferFlags                    m_flags;
-        GBuffer                        *m_pGBuffer;
-        VkRenderPass                    m_renderPass;
-        VkFramebuffer                   m_frameBuffer;
+        Device                         *m_pDevice = nullptr;
+        GBufferFlags                    m_flags = GBUFFER_NONE;
+        GBuffer                        *m_pGBuffer = nullptr;
+        VkRenderPass                    m_renderPass = VK_NULL_HANDLE;
+        VkFramebuffer                   m_frameBuffer = VK_NULL_HANDLE;
         std::vector<VkClearValue>       m_clearValues;
     };
 
@@ -89,47 +89,47 @@ namespace CAULDRON_VK
 
         // depth buffer
         Texture                         m_DepthBuffer;
-        VkImageView                     m_DepthBufferDSV;
-        VkImageView                     m_DepthBufferSRV;
+        VkImageView                     m_DepthBufferDSV = VK_NULL_HANDLE;
+        VkImageView                     m_DepthBufferSRV = VK_NULL_HANDLE;
 
         // diffuse
         Texture                         m_Diffuse;
-        VkImageView                     m_DiffuseSRV;
+        VkImageView                     m_DiffuseSRV = VK_NULL_HANDLE;
 
         // specular
         Texture                         m_SpecularRoughness;
-        VkImageView                     m_SpecularRoughnessSRV;
+        VkImageView                     m_SpecularRoughnessSRV = VK_NULL_HANDLE;
 
         // upscale reactive data
         Texture                         m_UpscaleReactive;
-        VkImageView                     m_UpscaleReactiveSRV;
+        VkImageView                     m_UpscaleReactiveSRV = VK_NULL_HANDLE;
 
         // upscale transparency and composition data
         Texture                         m_UpscaleTransparencyAndComposition;
-        VkImageView                     m_UpscaleTransparencyAndCompositionSRV;
+        VkImageView                     m_UpscaleTransparencyAndCompositionSRV = VK_NULL_HANDLE;
 
         // motion vectors
         Texture                         m_MotionVectors;
-        VkImageView                     m_MotionVectorsSRV;
+        VkImageView                     m_MotionVectorsSRV = VK_NULL_HANDLE;
 
         // normal buffer
         Texture                         m_NormalBuffer;
-        VkImageView                     m_NormalBufferSRV;
+        VkImageView                     m_NormalBufferSRV = VK_NULL_HANDLE;
 
         // HDR
         Texture                         m_HDR;
-        VkImageView                     m_HDRSRV;
+        VkImageView                     m_HDRSRV = VK_NULL_HANDLE;
 
         // VRS
         Texture                         m_VRS;
-        VkImageView                     m_VRSSRV;
+        VkImageView                     m_VRSSRV = VK_NULL_HANDLE;
 
     private:
-        Device                         *m_pDevice;
+        Device                         *m_pDevice = nullptr;
 
-        VkSampleCountFlagBits           m_sampleCount;
+        VkSampleCountFlagBits           m_sampleCount = VK_SAMPLE_COUNT_1_BIT;
 
-        GBufferFlags                    m_GBufferFlags;
+        GBufferFlags                    m_GBufferFlags = GBUFFER_NONE;
         std::vector<VkClearValue>       m_clearValues;
 
         std::map<GBufferFlags, VkFormat> m_formats;

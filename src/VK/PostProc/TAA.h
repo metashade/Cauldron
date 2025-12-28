@@ -46,16 +46,16 @@ namespace CAULDRON_VK
         bool                  m_TexturesInUndefinedLayout;
 
         Texture               m_TAABuffer;
-        VkImageView           m_TAABufferSRV;
-        VkImageView           m_TAABufferUAV;
+        VkImageView           m_TAABufferSRV = VK_NULL_HANDLE;
+        VkImageView           m_TAABufferUAV = VK_NULL_HANDLE;
         
         Texture               m_HistoryBuffer;
-        VkImageView           m_HistoryBufferSRV;
-        VkImageView           m_HistoryBufferUAV;
+        VkImageView           m_HistoryBufferSRV = VK_NULL_HANDLE;
+        VkImageView           m_HistoryBufferUAV = VK_NULL_HANDLE;
 
-        VkSampler             m_samplers[4];
+        VkSampler             m_samplers[4] = {};
 
-        VkDescriptorSet       m_TaaDescriptorSet;
+        VkDescriptorSet       m_TaaDescriptorSet = VK_NULL_HANDLE;
         VkDescriptorSetLayout m_TaaDescriptorSetLayout;
         PostProcCS            m_TAA;
         PostProcCS            m_TAAFirst;

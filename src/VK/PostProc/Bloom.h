@@ -54,7 +54,7 @@ namespace CAULDRON_VK
 
         uint32_t                   m_Width;
         uint32_t                   m_Height;
-        int                        m_mipCount;
+        int                        m_mipCount = 0;
 
         bool                       m_doBlur;
         bool                       m_doUpscale;
@@ -66,11 +66,11 @@ namespace CAULDRON_VK
 
         struct Pass
         {
-            VkImageView     m_RTV;
-            VkImageView     m_SRV;
-            VkFramebuffer   m_frameBuffer;
-            VkDescriptorSet m_descriptorSet;
-            float m_weight;
+            VkImageView     m_RTV = VK_NULL_HANDLE;
+            VkImageView     m_SRV = VK_NULL_HANDLE;
+            VkFramebuffer   m_frameBuffer = VK_NULL_HANDLE;
+            VkDescriptorSet m_descriptorSet = VK_NULL_HANDLE;
+            float m_weight = 0.0f;
         };
 
         Pass                       m_mip[BLOOM_MAX_MIP_LEVELS];

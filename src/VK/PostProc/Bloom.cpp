@@ -222,6 +222,12 @@ namespace CAULDRON_VK
 
     void Bloom::OnDestroyWindowSizeDependentResources()
     {
+        if (!m_pDevice) return;
+
+        // Early out if window-size-dependent resources were never created
+        if (m_mipCount == 0)
+            return;
+
         m_blur.OnDestroyWindowSizeDependentResources();
 
         for (int i = 0; i < m_mipCount; i++)
@@ -252,6 +258,8 @@ namespace CAULDRON_VK
             vkDestroyFramebuffer(m_pDevice->GetDevice(), m_output.m_frameBuffer, NULL);
             m_output.m_frameBuffer = {};
         }
+
+        m_mipCount = 0;  // Reset so we know resources are destroyed
     }
 
     void Bloom::OnDestroy()

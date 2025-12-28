@@ -122,6 +122,7 @@ void MagnifierPS::OnCreateWindowSizeDependentResources(uint32_t Width, uint32_t 
 
 void MagnifierPS::OnDestroyWindowSizeDependentResources()
 {
+	if (!m_pDevice) return;
 	VkDevice device = m_pDevice->GetDevice();
 	if (m_SamplerSrc)
 	{
@@ -129,7 +130,7 @@ void MagnifierPS::OnDestroyWindowSizeDependentResources()
 		m_SamplerSrc = nullptr;
 	}
 
-	if (!m_bOutputsToSwapchain)
+	if (!m_bOutputsToSwapchain && m_SRVOutput != nullptr)
 	{
 		vkDestroyImageView(device, m_SRVOutput, NULL);
 		vkDestroyImageView(device, m_RTVOutput, NULL);

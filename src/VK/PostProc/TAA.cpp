@@ -215,6 +215,12 @@ namespace CAULDRON_VK
     //--------------------------------------------------------------------------------------
     void TAA::OnDestroyWindowSizeDependentResources()
     {
+        if (!m_pDevice) return;
+
+        // Early out if window-size-dependent resources were never created
+        if (m_TAABufferSRV == VK_NULL_HANDLE)
+            return;
+
         m_HistoryBuffer.OnDestroy();
         m_TAABuffer.OnDestroy();
 
@@ -222,6 +228,12 @@ namespace CAULDRON_VK
         vkDestroyImageView(m_pDevice->GetDevice(), m_TAABufferUAV, nullptr);
         vkDestroyImageView(m_pDevice->GetDevice(), m_HistoryBufferSRV, nullptr);
         vkDestroyImageView(m_pDevice->GetDevice(), m_HistoryBufferUAV, nullptr);
+
+        // Reset to null so we know resources are destroyed
+        m_TAABufferSRV = VK_NULL_HANDLE;
+        m_TAABufferUAV = VK_NULL_HANDLE;
+        m_HistoryBufferSRV = VK_NULL_HANDLE;
+        m_HistoryBufferUAV = VK_NULL_HANDLE;
     }
 
     void TAA::Draw(VkCommandBuffer cmd_buf)
